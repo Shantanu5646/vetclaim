@@ -506,3 +506,50 @@ a:hover { color: #1a4480; }
   letter-spacing: 0.3px;
 }
 .va-form-badge a { color: #1a4480; }
+
+/* ============================================================
+   Profile switcher dropdown — nav top-right
+   ============================================================ */
+
+.va-nav__user {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The dropdown panel */
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  background: white;
+  border: 1px solid #dfe1e2;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  min-width: 240px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.profile-dropdown__item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.1s;
+}
+.profile-dropdown__item:last-child { border-bottom: none; }
+.profile-dropdown__item:hover { background: #f0f4f8; }
+.profile-dropdown__item--active { background: #e8f1f9; }
+
+.profile-dropdown__name {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #112e51;
+}
+.profile-dropdown__meta {
+  display: block;
+  font-size: 12px;
+  color: #71767a;
+  margin-top: 2px;
+}
