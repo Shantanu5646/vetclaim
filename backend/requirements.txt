@@ -1,0 +1,6 @@
+google-adk
+google-generativeai
+reportlab
+pydantic
+python-dotenv
+elevenlabs
