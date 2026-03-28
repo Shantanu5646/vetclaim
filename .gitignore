@@ -2,6 +2,12 @@
 .env
 .env.local
 
+# Claude Code session and project metadata (local only)
+.claude/
+
+# Kiro specs and steering (local only)
+.kiro/
+
 # VA portal uploaded PDFs — generated at runtime, not source code
 mock_va_portal/submissions/
 
