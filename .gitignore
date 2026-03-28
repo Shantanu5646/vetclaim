@@ -1,5 +1,18 @@
+# Documentation — keep locally, don't commit
+*.md
+
+# Root test file (old test.py)
+/test.py
+
 # Environment variables — never commit API keys
 .env
+.env.local
+
+# Claude Code session and project metadata (local only)
+.claude/
+
+# Kiro specs and steering (local only)
+.kiro/
 
 # VA portal uploaded PDFs — generated at runtime, not source code
 mock_va_portal/submissions/
