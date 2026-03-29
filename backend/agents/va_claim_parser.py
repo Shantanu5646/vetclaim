@@ -15,7 +15,7 @@ import pdfplumber
 
 
 STATEMENT_NAME = "james_miller_personal_statement.pdf"
-DECISION_NAME = "james_miller_decision_letter.pdf"
+DECISION_NAME = "james_miller_decision_letter_test1.pdf"
 DBQ_NAME = "james_miller_ear_dbq.pdf"
 
 
