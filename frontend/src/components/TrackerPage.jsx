@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 
-const CALLING_AGENT_BASE_URL = import.meta.env.VITE_CALLING_AGENT_URL || 'http://localhost:8000'
 const NAV_BLUE = '#1B3A6B'
 
 const STAGES = [
@@ -21,13 +20,9 @@ const STAGES = [
   },
 ]
 
-export default function TrackerPage({ files, onBack }) {
+export default function TrackerPage({ files, onBack, onCallClick }) {
   const [activeStage, setActiveStage] = useState(0)
   const [completedStages, setCompletedStages] = useState(new Set([0]))
-  const [recipientPhone, setRecipientPhone] = useState('8008271000')
-  const [phoneError, setPhoneError] = useState('')
-  const [phoneSuccess, setPhoneSuccess] = useState('')
-  const [isCallingLoading, setIsCallingLoading] = useState(false)
 
   useEffect(() => {
     const timers = [
@@ -40,29 +35,6 @@ export default function TrackerPage({ files, onBack }) {
 
   const allDone = completedStages.size === 3
   const fileCount = Array.isArray(files) ? files.length : 0
-
-  const handleMakeCall = async () => {
-    setPhoneError('')
-    setPhoneSuccess('')
-    const cleaned = recipientPhone.replace(/\D/g, '')
-    if (cleaned.length < 10) { setPhoneError('Please enter a valid phone number (10+ digits)'); return }
-    setIsCallingLoading(true)
-    try {
-      const res = await fetch(`${CALLING_AGENT_BASE_URL}/call`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: recipientPhone }),
-      })
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed to initiate call') }
-      const data = await res.json()
-      setPhoneSuccess(`Call initiated — SID: ${data.call_sid?.slice(0, 12)}...`)
-      setTimeout(() => setPhoneSuccess(''), 4000)
-    } catch (err) {
-      setPhoneError(`Call failed: ${err.message}`)
-    } finally {
-      setIsCallingLoading(false)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -175,58 +147,26 @@ export default function TrackerPage({ files, onBack }) {
           </div>
         </div>
 
-        {/* ── VA Call Card ── */}
+        {/* ── VA Calling Agent ── */}
         <div className="fade-in-up-3 mb-8 border border-gray-200 rounded-xl p-6 bg-white">
           <h2 className="text-base font-bold text-gray-900 mb-1">Call the VA</h2>
           <p className="text-gray-500 text-xs mb-4">
-            Our agent calls 1-800-827-1000 and reads your automated claim status request.
+            Our AI agent calls your phone, reads a consent disclosure, then connects to
+            1-800-827-1000 and requests a status update on your behalf. Transcript and
+            summary are saved automatically.
           </p>
-
-          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Phone Number</label>
-          <input
-            type="tel"
-            value={recipientPhone}
-            onChange={(e) => setRecipientPhone(e.target.value)}
-            disabled={isCallingLoading}
-            className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none mb-4 focus:border-blue-400 transition-colors disabled:opacity-50"
-          />
-
-          {phoneSuccess && (
-            <div className="mb-4 px-4 py-3 rounded-lg text-xs text-green-700 bg-green-50 border border-green-200">
-              {phoneSuccess}
-            </div>
-          )}
-          {phoneError && (
-            <div className="mb-4 px-4 py-3 rounded-lg text-xs text-red-700 bg-red-50 border border-red-200">
-              {phoneError}
-            </div>
-          )}
-
           <button
-            onClick={handleMakeCall}
-            disabled={isCallingLoading || !recipientPhone.trim()}
-            className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={onCallClick}
+            className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-colors flex items-center justify-center gap-2"
             style={{ background: NAV_BLUE }}
-            onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#0F2444' }}
-            onMouseLeave={e => { e.currentTarget.style.background = NAV_BLUE }}
+            onMouseEnter={e => e.currentTarget.style.background = '#0F2444'}
+            onMouseLeave={e => e.currentTarget.style.background = NAV_BLUE}
           >
-            {isCallingLoading ? (
-              <>
-                <svg className="w-4 h-4 spin-cw" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                </svg>
-                Initiating Call...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                </svg>
-                Initiate VA Call
-              </>
-            )}
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+            </svg>
+            Open VA Calling Agent
           </button>
-          <p className="text-center text-xs text-gray-400 mt-2">Requires Twilio credentials & ngrok</p>
         </div>
 
         {/* All done */}

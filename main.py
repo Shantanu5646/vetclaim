@@ -1,39 +1,33 @@
 """
-VA Caller Agent — Twilio voice server
---------------------------------------
-Handles:
-  POST /start-call       — place the outbound call to the veteran's phone
-  POST /outbound         — TwiML: consent disclosure + bridge to VA
-  POST /recording-status — Twilio webhook when recording is ready
-  GET  /calls            — list logged calls
-  GET  /calls/{call_sid} — get a single call's transcript + summary
+VA Caller Agent — Vapi-powered voice server
+--------------------------------------------
+POST /start-va-call     — create outbound call via Vapi
+POST /vapi/webhook      — receive call events from Vapi
+GET  /calls             — list saved call records
+GET  /calls/{call_id}   — get a single call record
+GET  /health
 """
 
 import os
-import re
 import json
+import requests
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
-from twilio.rest import Client
-from twilio.twiml.voice_response import VoiceResponse, Dial
 from dotenv import load_dotenv
 
-from backend.recording import handle_recording_webhook
 from backend.storage import save_call, get_call, list_calls
 
 load_dotenv()
 
-ACCOUNT_SID   = os.getenv("TWILIO_ACCOUNT_SID",  "YOUR_TWILIO_ACCOUNT_SID")
-AUTH_TOKEN    = os.getenv("TWILIO_AUTH_TOKEN",    "YOUR_TWILIO_AUTH_TOKEN")
-TWILIO_NUMBER = os.getenv("TWILIO_PHONE_NUMBER",  "+1YOUR_TWILIO_NUMBER")
-YOUR_NUMBER   = os.getenv("YOUR_PHONE_NUMBER",    "+1YOUR_PERSONAL_NUMBER")
-VA_NUMBER     = os.getenv("VA_NUMBER",            "+18008271000")
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL",    "https://your-ngrok-url.ngrok-free.app")
+VAPI_API_KEY      = os.getenv("VAPI_API_KEY", "")
+VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "")
+VAPI_PHONE_NUMBER_ID = os.getenv("VAPI_PHONE_NUMBER_ID", "")
+VA_NUMBER         = os.getenv("VA_NUMBER", "+18008271000")
 
-client = Client(ACCOUNT_SID, AUTH_TOKEN)
+VAPI_BASE_URL = "https://api.vapi.ai"
 
 app = FastAPI(title="VetClaim VA Caller Agent")
 
@@ -46,179 +40,193 @@ app.add_middleware(
 )
 
 
-def _clean(phone: str) -> str:
-    digits = re.sub(r"\D", "", phone)
-    if len(digits) == 10:
-        digits = "1" + digits
-    return "+" + digits
-
-
-# ── Models ──────────────────────────────────────────────────────────────
+# ── Models ───────────────────────────────────────────────────────────────
 
 class StartCallRequest(BaseModel):
-    veteran_phone: Optional[str] = None   # defaults to YOUR_NUMBER if omitted
-    full_name:     Optional[str] = None
-    last_four_ssn: Optional[str] = None
-    va_file_number: Optional[str] = None
-    claim_date:    Optional[str] = None
-    claim_type:    Optional[str] = None
+    customer_number: str
+    full_name:       Optional[str] = None
+    last_four_ssn:   Optional[str] = None
+    va_file_number:  Optional[str] = None
+    claim_date:      Optional[str] = None
+    claim_type:      Optional[str] = "disability"
 
 
-# ── Endpoints ────────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+def _vapi_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {VAPI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def _build_system_prompt(req: StartCallRequest) -> str:
+    name_line  = f"Veteran name: {req.full_name}." if req.full_name else ""
+    ssn_line   = f"Last 4 of SSN: {req.last_four_ssn}." if req.last_four_ssn else ""
+    file_line  = f"VA file number: {req.va_file_number}." if req.va_file_number else ""
+    date_line  = f"Claim submitted: {req.claim_date}." if req.claim_date else ""
+    type_line  = f"Claim type: {req.claim_type}." if req.claim_type else ""
+
+    claim_details = " ".join(filter(None, [name_line, ssn_line, file_line, date_line, type_line]))
+
+    return f"""You are a call assistant helping a U.S. veteran check the status of their VA disability claim.
+
+STEP 1 — CONSENT DISCLOSURE (say this first, verbatim):
+"Hello. This call may be recorded for documentation and note-taking purposes. By staying on the line, you consent to the recording. We are now connecting you to the VA."
+
+Wait 2 seconds.
+
+STEP 2 — STATE THE CLAIM STATUS REQUEST to the VA representative:
+"Hello. I am requesting a status update on a VA {req.claim_type or 'disability'} claim. {claim_details} Please provide the current claim status, whether any additional evidence or documents are needed, and any pending actions required. Thank you."
+
+STEP 3 — LISTEN and take notes. Do not interrupt the VA representative.
+
+STEP 4 — After the call, your summary should include:
+- Current claim status
+- Any documents or evidence the VA has requested
+- Any deadlines mentioned
+- Next steps for the veteran
+
+IMPORTANT: You are not a lawyer or doctor. Do not give legal or medical advice. Always recommend the veteran work with an accredited VSO for complex questions."""
+
+
+# ── Routes ───────────────────────────────────────────────────────────────
 
 @app.get("/")
 def home():
     return {
-        "service": "VetClaim VA Caller Agent",
+        "service": "VetClaim VA Caller Agent (Vapi)",
         "status": "running",
-        "twilio_configured": ACCOUNT_SID != "YOUR_TWILIO_ACCOUNT_SID",
+        "vapi_configured": bool(VAPI_API_KEY),
     }
 
 
-@app.post("/start-call")
-async def start_call(req: StartCallRequest):
+@app.post("/start-va-call")
+async def start_va_call(req: StartCallRequest):
     """
-    Places an outbound call to the veteran (or YOUR_NUMBER).
-    When the veteran answers they hear the consent notice, then get bridged to the VA.
+    Creates an outbound Vapi call to the veteran's number.
+    The Vapi assistant handles consent disclosure, then states the claim request to the VA.
     """
-    if ACCOUNT_SID == "YOUR_TWILIO_ACCOUNT_SID":
+    if not VAPI_API_KEY:
         return JSONResponse(status_code=400, content={
-            "error": "Twilio credentials not configured",
-            "message": "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in .env",
+            "error": "VAPI_API_KEY not configured",
+            "message": "Add VAPI_API_KEY to your .env file",
         })
 
-    target = _clean(req.veteran_phone) if req.veteran_phone else YOUR_NUMBER
+    system_prompt = _build_system_prompt(req)
 
-    # Pass claim details as query params to /outbound so TwiML can use them
-    params = []
-    if req.full_name:      params.append(f"full_name={req.full_name.replace(' ', '+')}")
-    if req.last_four_ssn:  params.append(f"last_four_ssn={req.last_four_ssn}")
-    if req.va_file_number: params.append(f"va_file_number={req.va_file_number.replace(' ', '+')}")
-    if req.claim_date:     params.append(f"claim_date={req.claim_date.replace('/', '-')}")
-    if req.claim_type:     params.append(f"claim_type={req.claim_type.replace(' ', '+')}")
+    # Use a transient assistant so we can inject the veteran's details dynamically
+    body = {
+        "assistant": {
+            "name": "VetClaim VA Caller",
+            "model": {
+                "provider": "anthropic",
+                "model": "claude-haiku-4-5-20251001",
+                "systemPrompt": system_prompt,
+                "temperature": 0.3,
+            },
+            "voice": {
+                "provider": "playht",
+                "voiceId": "jennifer",
+            },
+            "firstMessage": (
+                "Hello. This call may be recorded for documentation and note-taking purposes. "
+                "By staying on the line, you consent to the recording. "
+                "We are now connecting to the VA."
+            ),
+            "recordingEnabled": True,
+            "hipaaEnabled": False,
+            "analysisPlan": {
+                "summaryPrompt": (
+                    "Summarize this VA call. Include: "
+                    "1. Current claim status. "
+                    "2. Documents or evidence requested by the VA. "
+                    "3. Any deadlines mentioned. "
+                    "4. Next steps for the veteran. "
+                    "Return as JSON with keys: claim_status, evidence_needed, deadlines, next_steps, notes."
+                ),
+                "successEvaluationPrompt": "Was the VA agent able to provide a claim status update? Answer yes or no.",
+                "successEvaluationRubric": "PassFail",
+            },
+        },
+        "customer": {
+            "number": req.customer_number,
+        },
+    }
 
-    outbound_url = f"{PUBLIC_BASE_URL}/outbound"
-    if params:
-        outbound_url += "?" + "&".join(params)
+    # Attach phone number ID if configured
+    if VAPI_PHONE_NUMBER_ID:
+        body["phoneNumberId"] = VAPI_PHONE_NUMBER_ID
 
     try:
-        call = client.calls.create(
-            to=target,
-            from_=TWILIO_NUMBER,
-            url=outbound_url,
+        resp = requests.post(
+            f"{VAPI_BASE_URL}/call",
+            json=body,
+            headers=_vapi_headers(),
+            timeout=30,
         )
-        # Save initial call record
-        save_call(call.sid, {
-            "call_sid": call.sid,
-            "to": target,
+        data = resp.json()
+
+        if resp.status_code not in (200, 201):
+            return JSONResponse(status_code=resp.status_code, content=data)
+
+        call_id = data.get("id", "unknown")
+        save_call(call_id, {
+            "call_id": call_id,
+            "customer_number": req.customer_number,
             "status": "initiated",
             "full_name": req.full_name,
             "claim_type": req.claim_type,
+            "vapi_response": data,
         })
-        return JSONResponse({"message": "Call initiated", "call_sid": call.sid, "to": target})
+
+        return JSONResponse({
+            "message": "Call initiated",
+            "call_id": call_id,
+            "status": data.get("status", "queued"),
+        })
+
     except Exception as e:
-        return JSONResponse(status_code=400, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.api_route("/outbound", methods=["GET", "POST"])
-async def outbound(request: Request):
+@app.post("/vapi/webhook")
+async def vapi_webhook(request: Request):
     """
-    TwiML webhook:
-    1. Reads consent disclosure to the veteran
-    2. Dials the VA and records the bridged call
-    3. On hang-up, triggers /recording-status
+    Receives server-sent events from Vapi:
+    - call-started, call-ended, transcript, recording, analysis
+    Saves artifacts to local call records.
     """
-    params = dict(request.query_params)
+    try:
+        event = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
 
-    # Rebuild claim info from query params
-    full_name    = params.get("full_name",    "").replace("+", " ") or None
-    last_four    = params.get("last_four_ssn") or None
-    va_file      = params.get("va_file_number", "").replace("+", " ") or None
-    claim_date   = params.get("claim_date", "").replace("-", "/") or None
-    claim_type   = params.get("claim_type", "").replace("+", " ") or "disability claim"
+    event_type = event.get("message", {}).get("type") or event.get("type", "unknown")
+    call       = event.get("message", {}).get("call") or event.get("call", {})
+    call_id    = call.get("id", "unknown")
 
-    name_phrase  = f"for {full_name}" if full_name else ""
-    ssn_phrase   = f"Last 4 S S N: {last_four}." if last_four else ""
-    file_phrase  = f"V A file number: {va_file}." if va_file else ""
-    date_phrase  = f"Claim submitted: {claim_date}." if claim_date else ""
+    if event_type == "end-of-call-report":
+        artifact  = event.get("message", {}).get("artifact", {})
+        analysis  = event.get("message", {}).get("analysis", {})
+        save_call(call_id, {
+            "status":        "completed",
+            "transcript":    artifact.get("transcript"),
+            "recording_url": artifact.get("recordingUrl"),
+            "messages":      artifact.get("messages", []),
+            "summary":       analysis.get("summary"),
+            "success_eval":  analysis.get("successEvaluation"),
+            "duration":      call.get("endedAt"),
+        })
 
-    status_msg = (
-        f"Hello. I am requesting a status update on my V A {claim_type} {name_phrase}. "
-        f"{ssn_phrase} {file_phrase} {date_phrase} "
-        "Please tell me the current status, whether additional evidence is needed, "
-        "and any pending actions required from me. Thank you."
-    ).strip()
+    elif event_type == "transcript":
+        transcript = event.get("message", {}).get("transcript", "")
+        save_call(call_id, {"live_transcript": transcript})
 
-    response = VoiceResponse()
+    elif event_type in ("call-started", "call-ended"):
+        save_call(call_id, {"status": event_type})
 
-    # ── Consent disclosure (required for all-party consent states) ──────
-    response.say(
-        "This call will be recorded for note-taking and documentation purposes. "
-        "By staying on the line, you consent to the recording. "
-        "Connecting to the V A now.",
-        voice="alice",
-    )
-    response.pause(length=1)
-
-    # ── Bridge to VA with recording ─────────────────────────────────────
-    dial = Dial(
-        record="record-from-answer-dual",
-        recording_status_callback=f"{PUBLIC_BASE_URL}/recording-status",
-        recording_status_callback_method="POST",
-        action=f"{PUBLIC_BASE_URL}/call-complete",
-        timeout=60,
-    )
-    dial.number(
-        VA_NUMBER,
-        status_callback=f"{PUBLIC_BASE_URL}/call-complete",
-        status_callback_event="completed",
-        status_callback_method="POST",
-    )
-    # Inject the claim status request message after VA answers
-    response.say(status_msg, voice="alice", rate="90%")
-    response.append(dial)
-
-    return Response(content=str(response), media_type="application/xml")
-
-
-@app.post("/call-complete")
-async def call_complete(request: Request):
-    """Called by Twilio when the dialed leg ends."""
-    form = await request.form()
-    call_sid    = form.get("CallSid", "")
-    call_status = form.get("CallStatus", "")
-    duration    = form.get("CallDuration", "0")
-
-    save_call(call_sid, {"status": call_status, "duration_seconds": int(duration)})
-    return Response(content="<Response/>", media_type="application/xml")
-
-
-@app.post("/recording-status")
-async def recording_status(request: Request):
-    """
-    Twilio fires this when a recording is ready.
-    Downloads the audio, transcribes it, summarizes it, saves everything.
-    """
-    form = await request.form()
-    recording_url = form.get("RecordingUrl", "")
-    call_sid      = form.get("CallSid", "")
-    recording_sid = form.get("RecordingSid", "")
-    duration      = form.get("RecordingDuration", "0")
-
-    if not recording_url:
-        return JSONResponse({"error": "No recording URL"}, status_code=400)
-
-    result = await handle_recording_webhook(
-        call_sid=call_sid,
-        recording_sid=recording_sid,
-        recording_url=recording_url,
-        duration=int(duration),
-        account_sid=ACCOUNT_SID,
-        auth_token=AUTH_TOKEN,
-    )
-
-    save_call(call_sid, result)
-    return JSONResponse({"status": "processed", "call_sid": call_sid})
+    return JSONResponse({"ok": True, "received": event_type})
 
 
 @app.get("/calls")
@@ -226,9 +234,9 @@ def list_all_calls():
     return list_calls()
 
 
-@app.get("/calls/{call_sid}")
-def get_single_call(call_sid: str):
-    data = get_call(call_sid)
+@app.get("/calls/{call_id}")
+def get_single_call(call_id: str):
+    data = get_call(call_id)
     if not data:
         return JSONResponse(status_code=404, content={"error": "Call not found"})
     return data
@@ -236,16 +244,15 @@ def get_single_call(call_sid: str):
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "service": "VetClaim VA Caller Agent"}
+    return {"status": "healthy", "service": "VetClaim VA Caller Agent (Vapi)"}
 
 
-# ── Also keep the legacy /call endpoint so the frontend still works ─────
+# ── Legacy /call endpoint so existing frontend still works ────────────────
 
 class LegacyCallRequest(BaseModel):
     to: str
 
 @app.post("/call")
 async def legacy_call(req: LegacyCallRequest):
-    """Legacy endpoint — wraps /start-call for the existing frontend."""
-    sr = StartCallRequest(veteran_phone=req.to)
-    return await start_call(sr)
+    sr = StartCallRequest(customer_number=req.to)
+    return await start_va_call(sr)

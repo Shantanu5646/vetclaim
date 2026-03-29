@@ -3,6 +3,7 @@ import LandingPage from './components/LandingPage'
 import UploadPage from './components/UploadPage'
 import LoadingScreen from './components/LoadingScreen'
 import TrackerPage from './components/TrackerPage'
+import CallingAgentPage from './components/CallingAgentPage'
 
 export default function App() {
   const [page, setPage] = useState('landing')
@@ -15,9 +16,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B1426] text-white">
+    <div className="min-h-screen bg-white text-gray-900">
       {page === 'landing' && (
-        <LandingPage onUploadClick={() => setPage('upload')} />
+        <LandingPage
+          onUploadClick={() => setPage('upload')}
+          onCallClick={() => setPage('caller')}
+        />
       )}
       {page === 'upload' && (
         <UploadPage
@@ -30,7 +34,11 @@ export default function App() {
         <TrackerPage
           files={uploadedFiles}
           onBack={() => setPage('landing')}
+          onCallClick={() => setPage('caller')}
         />
+      )}
+      {page === 'caller' && (
+        <CallingAgentPage onBack={() => setPage('tracker')} />
       )}
     </div>
   )
