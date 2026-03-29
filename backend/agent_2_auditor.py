@@ -4,8 +4,6 @@ Agent 2: AI legal auditor — analyzes VAClaimParser output and may download/fil
 
 from __future__ import annotations
 
-import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -15,22 +13,8 @@ _BACKEND_DIR = Path(__file__).resolve().parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-import requests
-from pypdf import PdfReader, PdfWriter
-
-from va_claim_parser import VAClaimParser
-
-VA_FORMS_API_URL = "https://api.va.gov/forms_api/v1/forms/20-0996"
-LIGHTHOUSE_FORMS_URL = "https://api.va.gov/services/va_forms/v0/forms/20-0996"
-FALLBACK_FORM_PDF_URL = "http://www.vba.va.gov/pubs/forms/VBA-20-0996-ARE.pdf"
-
-BLANK_PDF_NAME = "blank_20_0996.pdf"
-FILLED_PDF_NAME = "james_miller_ready_to_file_appeal.pdf"
-
-_HTTP_HEADERS = {
-    "Accept": "application/json",
-    "User-Agent": "VAClaimAuditor/1.0 (hackathon; +https://www.va.gov)",
-}
+from agents.filer_agent import VAFormFiler
+from agents.va_claim_parser import VAClaimParser
 
 
 class VAClaimAuditor:
@@ -51,74 +35,6 @@ class VAClaimAuditor:
             return True
         return bool(re.search(r"(?<![0-9])0\s*%", text))
 
-    def _get_form_pdf_url_from_api(self) -> str:
-        r = requests.get(VA_FORMS_API_URL, headers=_HTTP_HEADERS, timeout=60)
-        if r.ok:
-            try:
-                payload = r.json()
-                url = payload.get("data", {}).get("attributes", {}).get("url")
-                if isinstance(url, str) and url.startswith("http"):
-                    return url
-            except json.JSONDecodeError:
-                pass
-
-        api_key = os.environ.get("VA_FORMS_API_KEY", "").strip()
-        if api_key:
-            r2 = requests.get(
-                LIGHTHOUSE_FORMS_URL,
-                headers={**_HTTP_HEADERS, "apikey": api_key},
-                timeout=60,
-            )
-            if r2.ok:
-                try:
-                    payload = r2.json()
-                    url = payload.get("data", {}).get("attributes", {}).get("url")
-                    if isinstance(url, str) and url.startswith("http"):
-                        return url
-                except json.JSONDecodeError:
-                    pass
-
-        return FALLBACK_FORM_PDF_URL
-
-    def download_and_fill_form(self) -> None:
-        pdf_url = self._get_form_pdf_url_from_api()
-        pdf_resp = requests.get(pdf_url, timeout=120)
-        pdf_resp.raise_for_status()
-
-        blank_path = self.backend_dir / BLANK_PDF_NAME
-        filled_path = self.backend_dir / FILLED_PDF_NAME
-        blank_path.write_bytes(pdf_resp.content)
-
-        reader = PdfReader(str(blank_path))
-        fields = reader.get_fields() or {}
-        field_names = {k for k, v in fields.items() if isinstance(v, dict) and v.get("/FT") == "/Tx"}
-
-        updates: dict[str, str] = {}
-        if "form1[0].#subform[2].Veterans_First_Name[0]" in field_names:
-            updates["form1[0].#subform[2].Veterans_First_Name[0]"] = "James"
-        if "form1[0].#subform[2].Veterans_Last_Name[0]" in field_names:
-            updates["form1[0].#subform[2].Veterans_Last_Name[0]"] = "Miller"
-        note = (
-            "Automated prep (hackathon): 0% Vestibular discrepancy — DBQ notes staggering/unsteady gait; "
-            "requesting Higher-Level Review."
-        )
-        if "form1[0].#subform[3].SPECIFICISSUE1[2]" in field_names:
-            updates["form1[0].#subform[3].SPECIFICISSUE1[2]"] = note
-        else:
-            for name in sorted(field_names):
-                if "SPECIFICISSUE" in name:
-                    updates[name] = note
-                    break
-
-        writer = PdfWriter()
-        writer.append(reader)
-        if updates:
-            for page in writer.pages:
-                writer.update_page_form_field_values(page, updates)
-
-        with open(filled_path, "wb") as f:
-            writer.write(f)
-
     @staticmethod
     def _critical_report() -> str:
         return (
@@ -134,7 +50,13 @@ class VAClaimAuditor:
         zero_pct = self._decision_letter_shows_zero_percent(parsed_json_data)
 
         if gait and zero_pct:
-            self.download_and_fill_form()
+            filer = VAFormFiler(backend_dir=self.backend_dir)
+            vet_data = {
+                "first_name": "James",
+                "last_name": "Miller",
+                "issue": "0% Vestibular discrepancy found",
+            }
+            filer.download_and_fill_hlr(vet_data)
             return self._critical_report()
         return "✅ All clear. Ratings match medical evidence."
 
