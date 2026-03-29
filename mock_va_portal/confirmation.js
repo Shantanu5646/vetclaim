@@ -46,35 +46,40 @@ async function fetchSubmission(submissionId) {
 }
 
 /**
- * Fetch live form details for VA Form 10182 (Notice of Disagreement) from
- * the VA Forms API. Returns the form title, last revision date, page count,
- * and official PDF URL so we can show a "✓ VA Verified" badge on the
- * confirmation page next to the submitted document.
- *
+ * Fetch live form details from the VA Forms API for a given form number.
+ * Used to show a "✓ VA Verified" badge next to submitted documents.
  * Falls back gracefully if the API is unreachable.
+ *
+ * @param {string} formId - e.g. "20-0996", "20-0995", "21-526EZ", "21-8940"
  */
-async function fetchForm10182Details() {
+async function fetchVAFormDetails(formId) {
+  if (!formId) return null;
   try {
     const response = await fetch(
-      `${VA_FORMS_API_BASE}/forms?query=10182`,
+      `${VA_FORMS_API_BASE}/forms?query=${encodeURIComponent(formId)}`,
       { headers: { "apiKey": VA_FORMS_API_KEY } }
     );
     if (!response.ok) throw new Error(`VA Forms API ${response.status}`);
 
     const data = await response.json();
-    const form = data.data?.[0]?.attributes;
-    if (!form) throw new Error("Form 10182 not found in response");
+    // Find the form whose form_name matches our target (e.g. "VA20-0996")
+    const match = data.data?.find(f =>
+      f.attributes?.form_name?.replace(/\s/g, "").includes(formId.replace(/-/g, ""))
+    ) || data.data?.[0];
+
+    const form = match?.attributes;
+    if (!form) throw new Error(`Form ${formId} not found in VA API response`);
 
     return {
-      name: form.form_name,           // "VA10182"
-      title: form.title,              // "Decision Review Request: Board Appeal..."
-      lastRevised: form.last_revision_on,  // "2022-03-15"
-      pages: form.pages,              // 3
-      officialUrl: form.url,          // link to the official blank PDF on va.gov
+      name: form.form_name,
+      title: form.title,
+      lastRevised: form.last_revision_on,
+      pages: form.pages,
+      officialUrl: form.url,
       detailsUrl: form.form_details_url,
     };
   } catch (err) {
-    console.warn("VA Forms API unavailable, skipping form verification:", err.message);
+    console.warn(`VA Forms API unavailable for ${formId}:`, err.message);
     return null;
   }
 }
@@ -100,23 +105,30 @@ function buildFormBadge(formDetails) {
  * data is always live from the server.
  */
 async function renderConfirmation(submission) {
-  // Fetch live form details in parallel with rendering — non-blocking
-  const formDetails = await fetchForm10182Details();
-  const formBadge = buildFormBadge(formDetails);
   const pdfUrl = `${VA_PORTAL_BASE}/submissions/${submission.id}/pdf`;
 
-  // Build the documents table rows — NOD row gets the live VA Forms API badge
-  const docRows = submission.documents.map((doc, index) => `
-    <tr>
-      <td>
-        <strong>${doc.name}</strong><br />
-        <span class="doc-subtitle">${doc.form}</span>
-        ${index === 0 ? formBadge : ""}
-      </td>
-      <td class="decision-granted">✓ Received</td>
-      <td>${doc.pages}</td>
-    </tr>
-  `).join("");
+  // Fetch VA API verification badges for all docs that have a va_form_id, in parallel
+  const formDetailsList = await Promise.all(
+    submission.documents.map(doc =>
+      doc.va_form_id ? fetchVAFormDetails(doc.va_form_id) : Promise.resolve(null)
+    )
+  );
+
+  // Build the documents table rows with per-row VA Verified badges
+  const docRows = submission.documents.map((doc, index) => {
+    const badge = buildFormBadge(formDetailsList[index]);
+    return `
+      <tr>
+        <td>
+          <strong>${doc.name}</strong><br />
+          <span class="doc-subtitle">${doc.form}</span>
+          ${badge}
+        </td>
+        <td class="decision-granted">✓ Received</td>
+        <td>${doc.pages}</td>
+      </tr>
+    `;
+  }).join("");
 
   // Build the conditions list from the comma-separated conditions string
   const conditionItems = submission.conditions.split(",").map(c => `

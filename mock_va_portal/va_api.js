@@ -84,13 +84,9 @@ async function initVABranchVerificationForProfile(branchCode) {
 /**
  * Poll the mock VA portal server every 3 seconds for new submissions.
  * When a submission arrives from VetClaim AI, show a notification banner
- * on the dashboard with a link to the confirmation page.
- *
- * We track which submission IDs we've already shown so we don't
- * re-show the banner on every poll cycle.
+ * and populate the Filed Appeals table on the dashboard.
  */
 function startSubmissionPolling() {
-  // Only poll on the dashboard page (index.html)
   const notificationArea = document.getElementById("submission-notification");
   if (!notificationArea) return;
 
@@ -99,11 +95,14 @@ function startSubmissionPolling() {
   async function poll() {
     try {
       const response = await fetch(`${VA_PORTAL_BASE}/submissions`);
-      if (!response.ok) return; // server not running yet — try again next cycle
+      if (!response.ok) return;
 
       const submissions = await response.json();
 
-      // Find the most recent submission we haven't shown yet
+      // Refresh the full appeals table on every poll cycle
+      refreshAppealsTable(submissions);
+
+      // Show banner only for the newest submission we haven't announced yet
       const newSubmission = submissions.find(s => !seenIds.has(s.id));
       if (!newSubmission) return;
 
@@ -111,18 +110,48 @@ function startSubmissionPolling() {
       showSubmissionBanner(newSubmission);
 
     } catch (err) {
-      // Server not running — this is expected before the demo starts
-      // Don't log anything so the console stays clean
+      // Server not running — expected before demo starts
     }
   }
 
   setInterval(poll, POLL_INTERVAL_MS);
-  poll(); // run immediately on page load too
+  poll();
 }
 
 /**
- * Inject a green notification banner into the dashboard when a new
- * submission is detected. The banner links to the confirmation page.
+ * Refresh the Filed Appeals table with all current submissions.
+ */
+function refreshAppealsTable(submissions) {
+  const section = document.getElementById("pending-appeals-section");
+  const tbody   = document.getElementById("appeals-tbody");
+  const badge   = document.getElementById("appeals-count");
+  if (!section || !tbody) return;
+
+  if (submissions.length === 0) {
+    section.style.display = "none";
+    return;
+  }
+
+  section.style.display = "block";
+  if (badge) badge.textContent = submissions.length;
+
+  tbody.innerHTML = submissions.map(s => `
+    <tr class="appeals-row">
+      <td><code class="conf-code">${s.confirmation_number}</code></td>
+      <td>${s.veteran_name}</td>
+      <td class="conditions-cell">${s.conditions}</td>
+      <td class="date-cell">${s.submitted_at}</td>
+      <td>
+        <a href="confirmation.html?id=${s.id}" class="va-btn va-btn--primary va-btn--sm">
+          View →
+        </a>
+      </td>
+    </tr>
+  `).join("");
+}
+
+/**
+ * Inject a green notification banner when a new submission is detected.
  */
 function showSubmissionBanner(submission) {
   const notificationArea = document.getElementById("submission-notification");

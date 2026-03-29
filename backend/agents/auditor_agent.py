@@ -28,7 +28,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
-from agents.filer_agent import VAFormFiler, FILLED_PDF_NAME
+from agents.filer_agent import VAFormFiler
 from schemas import ParsedClaim
 from tools.cfr_lookup import cfr_lookup as _cfr_lookup, cfr_compare_rating as _cfr_compare_rating
 from tools.pact_act_check import pact_act_check as _pact_act_check
@@ -667,33 +667,99 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
     if "auditor_notes" not in audit_result:
         audit_result["auditor_notes"] = ""
 
-    output_dir = Path(__file__).resolve().parent.parent / "output"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    backend_dir = Path(__file__).resolve().parent.parent
+    (backend_dir / "output").mkdir(parents=True, exist_ok=True)
+
+    # Build veteran_data — prefer LLM audit_result for name (more accurate than regex)
+    llm_name = audit_result.get("veteran_name") or parsed_claim.veteran_name or ""
+    parts = llm_name.split()
+    first_name = parts[0] if parts else ""
+    last_name  = " ".join(parts[1:]) if len(parts) > 1 else ""
+
+    # Today's date for signature / filing date fields
+    from datetime import date as _date
+    today = _date.today()
+    sig_month = str(today.month).zfill(2)
+    sig_day   = str(today.day).zfill(2)
+    sig_year  = str(today.year)
+
+    # Use LLM-extracted condition names from flags for the issue description
+    llm_conditions = [
+        f.get("condition_name", "")
+        for f in audit_result.get("flags", [])
+        if isinstance(f, dict) and f.get("condition_name")
+    ]
+    if llm_conditions:
+        issue_text = "; ".join(llm_conditions[:4])[:200]
+    elif parsed_claim.conditions:
+        issue_text = "; ".join(
+            c.condition_name for c in parsed_claim.conditions if c.condition_name
+        )[:200]
+    else:
+        issue_text = "Service-connected condition"
+
+    # Generate realistic-looking demographic data for fields not in the documents.
+    # We seed from the veteran name so the same veteran always gets consistent data.
+    import hashlib as _hashlib
+    _seed = int(_hashlib.md5(llm_name.encode()).hexdigest()[:8], 16)
+    import random as _random
+    _rng = _random.Random(_seed)
+
+    _area_codes   = ["210", "512", "619", "757", "910", "843", "850", "253", "907", "808"]
+    _streets      = ["4821 Valor Ridge Dr", "1203 Liberty Oak Ln", "7742 Patriot Blvd",
+                     "335 Ft. Bragg Rd", "9110 Veterans Way", "620 Honor Guard Ave",
+                     "2244 Service Member St", "5501 Eagle Crest Dr"]
+    _cities_states = [
+        ("San Antonio", "TX", "78201"), ("Fayetteville", "NC", "28301"),
+        ("Jacksonville", "NC", "28540"), ("Virginia Beach", "VA", "23451"),
+        ("Colorado Springs", "CO", "80903"), ("Killeen", "TX", "76540"),
+        ("Clarksville", "TN", "37040"), ("Tacoma", "WA", "98402"),
+    ]
+    _city, _state, _zip = _cities_states[_seed % len(_cities_states)]
+
+    veteran_data = {
+        "first_name":     first_name,
+        "last_name":      last_name,
+        # SSN — realistic format, clearly demo values (000 prefix)
+        "ssn_1":          "000",
+        "ssn_2":          str(_rng.randint(10, 99)),
+        "ssn_3":          str(_rng.randint(1000, 9999)),
+        # DOB — plausible for a Gulf War / OIF veteran
+        "dob_month":      str(_rng.randint(1, 12)).zfill(2),
+        "dob_day":        str(_rng.randint(1, 28)).zfill(2),
+        "dob_year":       str(_rng.randint(1968, 1985)),
+        # Phone
+        "phone_area":     _area_codes[_seed % len(_area_codes)],
+        "phone_mid":      str(_rng.randint(200, 999)),
+        "phone_last":     str(_rng.randint(1000, 9999)),
+        # Address
+        "address_street": _streets[_seed % len(_streets)],
+        "address_city":   _city,
+        "address_state":  _state,
+        "address_zip":    _zip,
+        # Claim fields
+        "issue":          issue_text,
+        "date_month":     sig_month,
+        "date_day":       sig_day,
+        "date_year":      sig_year,
+        "sign_month":     sig_month,
+        "sign_day":       sig_day,
+        "sign_year":      sig_year,
+    }
 
     for form_number in all_forms:
         try:
-            filer = VAFormFiler(backend_dir=output_dir)
-            veteran_name = parsed_claim.veteran_name or ""
-            first_name, _, last_name = veteran_name.partition(" ")
-            veteran_data = {
-                "first_name": first_name,
-                "last_name": last_name,
-                "issue": (
-                    parsed_claim.conditions[0].condition_name
-                    if parsed_claim.conditions
-                    else "Service-connected condition"
-                ),
-            }
-            filer.download_and_fill_hlr(veteran_data)
-            # VAFormFiler saves to backend_dir / FILLED_PDF_NAME
-            filled_path = str(output_dir / FILLED_PDF_NAME)
+            filer = VAFormFiler(backend_dir=str(backend_dir))
+            filled_path, fields_found, fields_filled = filer.download_and_fill_hlr(
+                veteran_data, form_number=form_number
+            )
             filled_form_paths.append(filled_path)
             va_form_links.append({
                 "form_number": form_number,
                 "filled_path": filled_path,
-                "pdf_url": filer._get_form_pdf_url_from_api(),
-                "fields_found": 0,
-                "fields_filled": 0,
+                "pdf_url": filer._get_form_pdf_url_from_api(form_number),
+                "fields_found": fields_found,
+                "fields_filled": fields_filled,
             })
         except Exception as exc:
             audit_result["auditor_notes"] += f" [Form {form_number} download failed: {str(exc)}]"

@@ -45,9 +45,27 @@
         <p class="va-subtitle">Claim #796-04-3456 &nbsp;&bull;&nbsp; Last updated: February 14, 2026</p>
       </div>
 
-      <!-- Submission notification — hidden until VetClaim AI sends a PDF.
-           va_api.js polls the server and injects the banner here when one arrives. -->
+      <!-- Submission notification banner — injected by va_api.js when a new appeal arrives -->
       <div id="submission-notification"></div>
+
+      <!-- Pending Appeals section — populated by va_api.js polling -->
+      <div id="pending-appeals-section" style="display:none;" class="va-card" style="margin-bottom:1.5rem;">
+        <h2>📬 Filed Appeals <span id="appeals-count" class="appeals-count-badge"></span></h2>
+        <p class="va-subtitle-small">Appeals submitted via VetClaim AI — synced in real time</p>
+        <table class="va-table" id="appeals-table">
+          <thead>
+            <tr>
+              <th>Confirmation #</th>
+              <th>Veteran</th>
+              <th>Conditions</th>
+              <th>Submitted</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="appeals-tbody">
+          </tbody>
+        </table>
+      </div>
 
       <!-- Current rating summary banner -->
       <div class="va-rating-banner">

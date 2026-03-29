@@ -566,3 +566,33 @@ a:hover { color: #1a4480; }
   color: #71767a;
   margin-top: 2px;
 }
+
+/* ── Filed Appeals table (populated by va_api.js) ── */
+.appeals-count-badge {
+  display: inline-block;
+  background: #e52207;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 1px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.appeals-row td { vertical-align: middle; }
+.conf-code {
+  font-family: monospace;
+  font-size: 13px;
+  background: #e8f1f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #112e51;
+}
+.conditions-cell {
+  font-size: 13px;
+  max-width: 260px;
+  color: #3d4551;
+}
+.date-cell { font-size: 13px; white-space: nowrap; color: #71767a; }
+.va-btn--sm { padding: 5px 12px; font-size: 13px; }
+.va-subtitle-small { font-size: 13px; color: #71767a; margin-bottom: 12px; }

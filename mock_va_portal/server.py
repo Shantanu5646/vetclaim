@@ -84,6 +84,57 @@ def submit_appeal():
     save_path = os.path.join(UPLOAD_DIR, safe_filename)
     pdf_file.save(save_path)
 
+    # Map VA form numbers → human-readable document names for the confirmation page
+    _FORM_META = {
+        "20-0996": {
+            "name": "Higher-Level Review (HLR)",
+            "form": "VA Form 20-0996",
+            "pages": 4,
+            "va_form_id": "20-0996",
+        },
+        "20-0995": {
+            "name": "Supplemental Claim Appeal",
+            "form": "VA Form 20-0995",
+            "pages": 6,
+            "va_form_id": "20-0995",
+        },
+        "21-526EZ": {
+            "name": "Disability Compensation Claim",
+            "form": "VA Form 21-526EZ",
+            "pages": 20,
+            "va_form_id": "21-526EZ",
+        },
+        "21-8940": {
+            "name": "Individual Unemployability Application (TDIU)",
+            "form": "VA Form 21-8940",
+            "pages": 4,
+            "va_form_id": "21-8940",
+        },
+    }
+
+    # Build documents list from the forms that were actually filled and submitted
+    forms_param = request.form.get("forms", "20-0996")
+    submitted_form_numbers = [f.strip() for f in forms_param.split(",") if f.strip()]
+
+    documents = []
+    for form_num in submitted_form_numbers:
+        if form_num in _FORM_META:
+            documents.append(dict(_FORM_META[form_num]))
+
+    # Always append the CFR analysis summary documents
+    documents.append({
+        "name": "Supporting Evidence Summary",
+        "form": "CFR Title 38 analysis",
+        "pages": 6,
+        "va_form_id": None,
+    })
+    documents.append({
+        "name": "CFR Title 38 Legal Citations Brief",
+        "form": "38 CFR § 4.130, § 3.309(e)",
+        "pages": 3,
+        "va_form_id": None,
+    })
+
     # Build the submission metadata record
     submission = {
         "id": confirmation_number,
@@ -92,11 +143,8 @@ def submit_appeal():
         "conditions": request.form.get("conditions", "PTSD (DC 9411), Respiratory Condition (DC 6604), TBI (DC 8045)"),
         "submitted_at": datetime.now().strftime("%B %d, %Y at %I:%M %p EST"),
         "pdf_filename": safe_filename,
-        "documents": [
-            {"name": "Notice of Disagreement (NOD)", "form": "Form 10182", "pages": 4},
-            {"name": "Supporting Evidence Summary", "form": "CFR Title 38 analysis", "pages": 6},
-            {"name": "CFR Title 38 Legal Citations Brief", "form": "38 CFR § 4.130, § 3.309(e)", "pages": 3},
-        ]
+        "form_numbers": submitted_form_numbers,
+        "documents": documents,
     }
 
     # Store in memory so the frontend can poll for it

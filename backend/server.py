@@ -212,6 +212,62 @@ def download():
     return send_file(abs_path, as_attachment=True, download_name=os.path.basename(abs_path))
 
 
+@app.route("/api/submit-appeal", methods=["POST"])
+def submit_appeal():
+    """Forward the first filled PDF for a completed job to the mock VA portal."""
+    import requests as _req
+
+    data = request.get_json(force=True, silent=True) or {}
+    job_id = data.get("job_id")
+    if not job_id:
+        return jsonify({"error": "job_id required"}), 400
+
+    job = jobs.get(job_id)
+    if job is None:
+        return jsonify({"error": "Job not found"}), 404
+    if job.status != "complete" or job.result is None:
+        return jsonify({"error": "Job not yet complete"}), 409
+
+    result = job.result
+    audit_result = result.get("audit_result", {})
+    va_form_links = result.get("va_form_links", [])
+
+    if not va_form_links:
+        return jsonify({"error": "No filled forms available to submit"}), 400
+
+    veteran_name = audit_result.get("veteran_name", "Unknown Veteran")
+    conditions = ", ".join(
+        f"{f.get('condition_name', '')} (DC {f.get('diagnostic_code', '')})"
+        for f in audit_result.get("flags", [])
+        if isinstance(f, dict) and f.get("condition_name")
+    )[:300] or "Service-connected conditions"
+
+    filled_path = va_form_links[0]["filled_path"]
+    if not os.path.isfile(filled_path):
+        return jsonify({"error": "Filled PDF file not found on disk"}), 500
+
+    # Pass all form numbers so the VA portal can build the correct documents list
+    form_numbers = ",".join(link["form_number"] for link in va_form_links)
+
+    try:
+        with open(filled_path, "rb") as pdf_fp:
+            portal_resp = _req.post(
+                "http://localhost:5050/submit-appeal",
+                files={"file": (os.path.basename(filled_path), pdf_fp, "application/pdf")},
+                data={
+                    "veteran_name": veteran_name,
+                    "conditions": conditions,
+                    "forms": form_numbers,
+                },
+                timeout=30,
+            )
+        if portal_resp.ok:
+            return jsonify(portal_resp.json()), 201
+        return jsonify({"error": f"VA portal returned {portal_resp.status_code}"}), 502
+    except Exception as exc:
+        return jsonify({"error": f"Could not reach VA portal: {exc}"}), 502
+
+
 @app.route("/api/status", methods=["GET"])
 def status():
     """Health check endpoint."""
