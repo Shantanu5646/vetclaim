@@ -11,7 +11,78 @@
 
 const PROFILES = {
 
+  // Profile 1: James T. Milner — real test case from testcase/james_millner/
+  // U.S. Marine Corps, 3 combat deployments to Afghanistan (OEF).
+  // ALS granted (presumptive), PTSD denied, Ear Condition denied.
   james: {
+    name: "James T. Milner",
+    claimNumber: "000-00-0000",
+    lastUpdated: "November 15, 2023",
+    rating: "100%",
+    payment: "$3,737.85",
+    decisionDate: "Nov 15, 2023",
+    branchCode: "MARINES",
+    service: {
+      branch: "U.S. Marine Corps",
+      dates: "Mar 2005 – Oct 2013",
+      era: "Post-9/11 / OEF",
+      deployments: "Afghanistan (Helmand) 2007, 2009–2010, 2012",
+      discharge: "Honorable",
+    },
+    appealDeadline: "November 15, 2024",
+    documents: [
+      "📄 Rating Decision Letter (Nov 15, 2023)",
+      "📄 C&P Exam — Combined DBQs (Aug 2023)",
+      "📄 DBQ — PTSD Review (Aug 14, 2023)",
+      "📄 DBQ — Ear Conditions / Vestibular (2023)",
+      "📄 DBQ — ALS (2023)",
+      "📄 Personal Statement (Jan 2023)",
+    ],
+    deniedCount: 2,
+    conditions: [
+      { name: "Amyotrophic Lateral Sclerosis (ALS)",             code: "8017", decision: "Service Connected — Presumptive", rating: "100%", denied: false },
+      { name: "Post-Traumatic Stress Disorder (PTSD)",           code: "9411", decision: "Denied — Insufficient Nexus",      rating: "0%",   denied: true  },
+      { name: "Ear Condition (Tinnitus / Vestibular Disorder)",  code: "6260", decision: "Denied — Inconsistent Documentation", rating: "0%", denied: true },
+    ],
+  },
+
+  // Profile 2: Robert Garza — real test case from testcase/robert-graza/
+  // Has PTSD DBQ, Arthritis DBQ, Amputation DBQ, C&P Exam, and Rating Decision.
+  robert: {
+    name: "Robert Garza",
+    claimNumber: "512-33-8801",
+    lastUpdated: "January 10, 2026",
+    rating: "60%",
+    payment: "$1,131.68",
+    decisionDate: "Jan 10, 2026",
+    branchCode: "ARMY",
+    service: {
+      branch: "U.S. Army",
+      dates: "Aug 1999 – May 2008",
+      era: "Post-9/11 / OIF",
+      deployments: "Iraq (OIF) 2003–2004, 2006",
+      discharge: "Honorable",
+    },
+    appealDeadline: "January 10, 2027",
+    documents: [
+      "📄 Rating Decision Letter (Jan 10, 2026)",
+      "📄 C&P Exam Results (Dec 2025)",
+      "📄 DBQ — PTSD (Dec 2025)",
+      "📄 DBQ — Arthritis (Dec 2025)",
+      "📄 DBQ — Amputation / Residuals (Dec 2025)",
+    ],
+    deniedCount: 2,
+    conditions: [
+      { name: "Amputation — Left Below Knee",              code: "5162", decision: "Service Connected", rating: "40%", denied: false },
+      { name: "Arthritis — Right Knee (Residuals)",        code: "5010", decision: "Service Connected", rating: "10%", denied: false },
+      { name: "Tinnitus",                                  code: "6260", decision: "Service Connected", rating: "10%", denied: false },
+      { name: "Post-Traumatic Stress Disorder (PTSD)",     code: "9411", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
+      { name: "Traumatic Brain Injury (TBI)",              code: "8045", decision: "Denied — Insufficient Evidence", rating: "0%", denied: true },
+    ],
+  },
+
+  // Profile 3: James R. Wilson — original demo veteran for the burn pit / PACT Act story
+  wilson: {
     name: "James R. Wilson",
     claimNumber: "796-04-3456",
     lastUpdated: "February 14, 2026",
@@ -28,83 +99,25 @@ const PROFILES = {
     },
     appealDeadline: "January 9, 2027",
     documents: [
+      "📄 Rating Decision Letter (Jan 9, 2026)",
       "📄 C&P Exam Results (Dec 2025)",
       "📄 DBQ — PTSD (Dec 2025)",
       "📄 DBQ — TBI (Dec 2025)",
     ],
     deniedCount: 2,
     conditions: [
-      { name: "Post-Traumatic Stress Disorder (PTSD)", code: "9411", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "Lumbar Strain (Lower Back)",            code: "5237", decision: "Service Connected", rating: "20%", denied: false },
-      { name: "Sleep Apnea",                           code: "6847", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
-      { name: "Respiratory Condition (Burn Pit Exposure)", code: "6604", decision: "Denied — No Nexus", rating: "0%", denied: true },
-    ],
-  },
-
-  maria: {
-    name: "Maria L. Santos",
-    claimNumber: "812-07-9921",
-    lastUpdated: "March 3, 2026",
-    rating: "20%",
-    payment: "$338.49",
-    decisionDate: "Mar 3, 2026",
-    branchCode: "NAVY",
-    service: {
-      branch: "U.S. Navy",
-      dates: "Jun 2005 – Aug 2017",
-      era: "Post-9/11",
-      deployments: "Persian Gulf 2008, Bahrain 2012",
-      discharge: "Honorable",
-    },
-    appealDeadline: "March 3, 2027",
-    documents: [
-      "📄 C&P Exam Results (Feb 2026)",
-      "📄 DBQ — Hearing Loss (Feb 2026)",
-      "📄 DBQ — PTSD (Jan 2026)",
-      "📄 Service Treatment Records (2005–2017)",
-    ],
-    deniedCount: 1,
-    conditions: [
-      { name: "Bilateral Hearing Loss",               code: "6100", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "Tinnitus",                             code: "6260", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "Migraines",                            code: "8100", decision: "Service Connected", rating: "0%",  denied: false },
-      { name: "Hypertension",                         code: "7101", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "PTSD — Military Sexual Trauma",        code: "9411", decision: "Denied — Insufficient Nexus", rating: "0%", denied: true },
-    ],
-  },
-
-  darnell: {
-    name: "Darnell T. Brooks",
-    claimNumber: "634-11-5507",
-    lastUpdated: "January 22, 2026",
-    rating: "40%",
-    payment: "$673.28",
-    decisionDate: "Jan 22, 2026",
-    branchCode: "MARINES",
-    service: {
-      branch: "U.S. Marine Corps",
-      dates: "Sep 2001 – Dec 2009",
-      era: "Post-9/11 / OEF / OIF",
-      deployments: "Afghanistan (OEF) 2002, Iraq (OIF) 2005",
-      discharge: "Honorable",
-    },
-    appealDeadline: "January 22, 2027",
-    documents: [
-      "📄 C&P Exam Results (Dec 2025)",
-      "📄 DBQ — Knee (Dec 2025)",
-      "📄 DBQ — PTSD (Nov 2025)",
-    ],
-    deniedCount: 2,
-    conditions: [
-      { name: "PTSD",                                 code: "9411", decision: "Service Connected", rating: "30%", denied: false },
-      { name: "Traumatic Brain Injury (TBI)",         code: "8045", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
-      { name: "Sleep Apnea",                          code: "6847", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
+      { name: "Post-Traumatic Stress Disorder (PTSD)",         code: "9411", decision: "Service Connected", rating: "10%", denied: false },
+      { name: "Traumatic Brain Injury (TBI)",                  code: "8045", decision: "Service Connected", rating: "10%", denied: false },
+      { name: "Lumbar Strain (Lower Back)",                    code: "5237", decision: "Service Connected", rating: "20%", denied: false },
+      { name: "Tinnitus",                                      code: "6260", decision: "Service Connected", rating: "10%", denied: false },
+      { name: "Sleep Apnea",                                   code: "6847", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
+      { name: "Respiratory Condition (Burn Pit Exposure)",     code: "6604", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
     ],
   },
 
 };
 
-// Track the active profile so va_api.js can read the current veteran name
+// Track the active profile — defaults to James T. Milner (real test case)
 let activeProfileKey = "james";
 
 /**
