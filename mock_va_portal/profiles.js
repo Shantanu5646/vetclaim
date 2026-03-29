@@ -36,9 +36,7 @@ const PROFILES = {
     deniedCount: 2,
     conditions: [
       { name: "Post-Traumatic Stress Disorder (PTSD)", code: "9411", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "Traumatic Brain Injury (TBI)",          code: "8045", decision: "Service Connected", rating: "10%", denied: false },
       { name: "Lumbar Strain (Lower Back)",            code: "5237", decision: "Service Connected", rating: "20%", denied: false },
-      { name: "Tinnitus",                              code: "6260", decision: "Service Connected", rating: "10%", denied: false },
       { name: "Sleep Apnea",                           code: "6847", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
       { name: "Respiratory Condition (Burn Pit Exposure)", code: "6604", decision: "Denied — No Nexus", rating: "0%", denied: true },
     ],
@@ -64,15 +62,16 @@ const PROFILES = {
       "📄 Rating Decision Letter (Mar 3, 2026)",
       "📄 C&P Exam Results (Feb 2026)",
       "📄 DBQ — Hearing Loss (Feb 2026)",
+      "📄 DBQ — PTSD (Jan 2026)",
       "📄 Service Treatment Records (2005–2017)",
     ],
-    deniedCount: 2,
+    deniedCount: 1,
     conditions: [
       { name: "Bilateral Hearing Loss",               code: "6100", decision: "Service Connected", rating: "10%", denied: false },
       { name: "Tinnitus",                             code: "6260", decision: "Service Connected", rating: "10%", denied: false },
       { name: "Migraines",                            code: "8100", decision: "Service Connected", rating: "0%",  denied: false },
+      { name: "Hypertension",                         code: "7101", decision: "Service Connected", rating: "10%", denied: false },
       { name: "PTSD — Military Sexual Trauma",        code: "9411", decision: "Denied — Insufficient Nexus", rating: "0%", denied: true },
-      { name: "Lumbar Disc Disease",                  code: "5243", decision: "Denied — Not Service Connected", rating: "0%", denied: true },
     ],
   },
 
@@ -101,8 +100,6 @@ const PROFILES = {
     deniedCount: 2,
     conditions: [
       { name: "PTSD",                                 code: "9411", decision: "Service Connected", rating: "30%", denied: false },
-      { name: "Right Knee — Patellofemoral Syndrome", code: "5260", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "Tinnitus",                             code: "6260", decision: "Service Connected", rating: "10%", denied: false },
       { name: "Traumatic Brain Injury (TBI)",         code: "8045", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
       { name: "Sleep Apnea",                          code: "6847", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
     ],
@@ -124,12 +121,6 @@ function renderProfile(profileKey) {
   if (!profile) return;
 
   activeProfileKey = profileKey;
-
-  // --- Nav: signed-in name ---
-  const userEl = document.querySelector(".va-nav__user");
-  if (userEl) {
-    userEl.innerHTML = `Signed in as <strong>${profile.name}</strong>`;
-  }
 
   // --- Page subtitle: claim number + last updated ---
   const subtitleEl = document.querySelector(".va-subtitle");
