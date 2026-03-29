@@ -1,0 +1,8 @@
+run frontend 
+    - cd /Users/mtb/Programming/Hackathon/vetclaim/frontend 
+    - npm install
+    - npm run dev
+
+run backend
+    - cd programming/hackathon/vetclaim/backend
+    - python3 server.py
