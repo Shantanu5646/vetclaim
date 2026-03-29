@@ -121,7 +121,7 @@ function Modal({ title, onClose, children }) {
   )
 }
 
-export default function LandingPage({ onUploadClick }) {
+export default function LandingPage({ onUploadClick, onCallClick }) {
   const [modal, setModal] = useState(null)
 
   return (
@@ -144,6 +144,15 @@ export default function LandingPage({ onUploadClick }) {
             </button>
             <button onClick={() => setModal('about')} className="text-sm text-gray-600 hover:text-gray-900 transition-colors font-medium">
               About
+            </button>
+            <button
+              onClick={onCallClick}
+              className="px-5 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+              style={{ background: GOLD }}
+              onMouseEnter={e => e.currentTarget.style.background = '#7A5F1F'}
+              onMouseLeave={e => e.currentTarget.style.background = GOLD}
+            >
+              📞 Call VA
             </button>
             <button
               onClick={onUploadClick}
