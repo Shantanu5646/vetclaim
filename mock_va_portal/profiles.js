@@ -13,7 +13,8 @@ const PROFILES = {
 
   // Profile 1: James T. Milner — real test case from testcase/james_millner/
   // U.S. Marine Corps, 3 combat deployments to Afghanistan (OEF).
-  // ALS granted (presumptive), PTSD denied, Ear Condition denied.
+  // Decision date: Nov 15, 2023.
+  // ALS granted (presumptive), PTSD denied (insufficient nexus), Ear Condition denied.
   james: {
     name: "James T. Milner",
     claimNumber: "000-00-0000",
@@ -32,52 +33,56 @@ const PROFILES = {
     appealDeadline: "November 15, 2024",
     documents: [
       "📄 Rating Decision Letter (Nov 15, 2023)",
-      "📄 C&P Exam — Combined DBQs (Aug 2023)",
+      "📄 C&P Exam — Combined DBQs (Aug 14, 2023)",
       "📄 DBQ — PTSD Review (Aug 14, 2023)",
       "📄 DBQ — Ear Conditions / Vestibular (2023)",
       "📄 DBQ — ALS (2023)",
-      "📄 Personal Statement (Jan 2023)",
+      "📄 Personal Statement / VA Form 21-0781 (Jan 2023)",
     ],
     deniedCount: 2,
     conditions: [
-      { name: "Amyotrophic Lateral Sclerosis (ALS)",             code: "8017", decision: "Service Connected — Presumptive", rating: "100%", denied: false },
-      { name: "Post-Traumatic Stress Disorder (PTSD)",           code: "9411", decision: "Denied — Insufficient Nexus",      rating: "0%",   denied: true  },
-      { name: "Ear Condition (Tinnitus / Vestibular Disorder)",  code: "6260", decision: "Denied — Inconsistent Documentation", rating: "0%", denied: true },
+      { name: "Amyotrophic Lateral Sclerosis (ALS)",            code: "8017", decision: "Service Connected — Presumptive", rating: "100%", denied: false },
+      { name: "Post-Traumatic Stress Disorder (PTSD)",          code: "9411", decision: "Denied — Insufficient Nexus",      rating: "0%",   denied: true  },
+      { name: "Ear Condition (Tinnitus / Vestibular Disorder)", code: "6260", decision: "Denied — Inconsistent Documentation", rating: "0%", denied: true },
     ],
   },
 
-  // Profile 2: Robert Garza — real test case from testcase/robert-graza/
-  // Has PTSD DBQ, Arthritis DBQ, Amputation DBQ, C&P Exam, and Rating Decision.
+  // Profile 2: Robert E. Garza — real test case from testcase/robert-graza/
+  // U.S. Army, OIF I & II (1998–2006). VA File: 29 831 447.
+  // Decision date: Dec 6, 2023.
+  // Right BKA amputation granted (40%), PTSD denied (stressor not corroborated),
+  // Rheumatoid Arthritis denied (nexus not established, not on PACT Act list).
+  // All 3 DBQ examiners recommended TDIU.
   robert: {
-    name: "Robert Garza",
-    claimNumber: "512-33-8801",
-    lastUpdated: "January 10, 2026",
-    rating: "60%",
-    payment: "$1,131.68",
-    decisionDate: "Jan 10, 2026",
+    name: "Robert E. Garza",
+    claimNumber: "29-831-447",
+    lastUpdated: "December 6, 2023",
+    rating: "40%",
+    payment: "$673.28",
+    decisionDate: "Dec 6, 2023",
     branchCode: "ARMY",
     service: {
       branch: "U.S. Army",
-      dates: "Aug 1999 – May 2008",
-      era: "Post-9/11 / OIF",
-      deployments: "Iraq (OIF) 2003–2004, 2006",
+      dates: "1998 – 2006",
+      era: "Post-9/11 / OIF I & II",
+      deployments: "Iraq (OIF I) 2003–2004, Iraq (OIF II) 2005–2006",
       discharge: "Honorable",
     },
-    appealDeadline: "January 10, 2027",
+    appealDeadline: "December 6, 2024",
     documents: [
-      "📄 Rating Decision Letter (Jan 10, 2026)",
-      "📄 C&P Exam Results (Dec 2025)",
-      "📄 DBQ — PTSD (Dec 2025)",
-      "📄 DBQ — Arthritis (Dec 2025)",
-      "📄 DBQ — Amputation / Residuals (Dec 2025)",
+      "📄 Rating Decision Letter (Dec 6, 2023)",
+      "📄 C&P Exam Results (2023)",
+      "📄 DBQ — Amputation / Residuals (Dr. Park, Oct 18, 2023)",
+      "📄 DBQ — PTSD (Dr. Webb, Oct 11, 2023)",
+      "📄 DBQ — Arthritis / DJD (Dr. Busch, Sep 5, 2023)",
     ],
     deniedCount: 2,
     conditions: [
-      { name: "Amputation — Left Below Knee",              code: "5162", decision: "Service Connected", rating: "40%", denied: false },
-      { name: "Arthritis — Right Knee (Residuals)",        code: "5010", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "Tinnitus",                                  code: "6260", decision: "Service Connected", rating: "10%", denied: false },
-      { name: "Post-Traumatic Stress Disorder (PTSD)",     code: "9411", decision: "Denied — No Nexus", rating: "0%",  denied: true  },
-      { name: "Traumatic Brain Injury (TBI)",              code: "8045", decision: "Denied — Insufficient Evidence", rating: "0%", denied: true },
+      { name: "Right Below-Knee Amputation (Transtibial) — DC 5163",  code: "5163", decision: "Service Connected",          rating: "40%", denied: false },
+      { name: "Residual Limb Pain / Phantom Pain (Secondary)",        code: "5299", decision: "Service Connected — Secondary", rating: "10%", denied: false },
+      { name: "Right Hip / Knee Overuse Syndrome (Secondary)",        code: "5010", decision: "Service Connected — Secondary", rating: "10%", denied: false },
+      { name: "PTSD with Major Depressive Disorder",                  code: "9411", decision: "Denied — Stressor Not Corroborated", rating: "0%", denied: true },
+      { name: "Rheumatoid Arthritis / Bilateral DJD Knees",           code: "5002", decision: "Denied — Nexus Not Established", rating: "0%", denied: true },
     ],
   },
 
