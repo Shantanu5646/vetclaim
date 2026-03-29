@@ -165,7 +165,21 @@ async def start_va_call(req: StartCallRequest):
             headers=_vapi_headers(),
             timeout=30,
         )
-        data = resp.json()
+
+        # Sometimes Vapi returns non-JSON (e.g. empty body or error HTML). handle robustly.
+        try:
+            data = resp.json()
+        except ValueError:
+            text_body = resp.text.strip()
+            if resp.status_code not in (200, 201):
+                return JSONResponse(status_code=resp.status_code, content={
+                    "error": "Vapi did not return valid JSON",
+                    "body": text_body or "(empty response)",
+                })
+            return JSONResponse(status_code=500, content={
+                "error": "Vapi returned invalid JSON",
+                "body": text_body or "(empty response)",
+            })
 
         if resp.status_code not in (200, 201):
             return JSONResponse(status_code=resp.status_code, content=data)

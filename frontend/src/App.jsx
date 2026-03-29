@@ -38,7 +38,7 @@ export default function App() {
         />
       )}
       {page === 'caller' && (
-        <CallingAgentPage onBack={() => setPage('tracker')} />
+        <CallingAgentPage onBack={() => setPage('landing')} />
       )}
     </div>
   )

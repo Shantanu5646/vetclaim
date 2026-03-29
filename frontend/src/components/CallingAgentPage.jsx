@@ -42,7 +42,15 @@ export default function CallingAgentPage({ onBack }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-      const data = await res.json()
+
+      let data
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        data = await res.json()
+      } else {
+        const text = await res.text()
+        data = { error: 'Non-JSON response from backend', details: text || 'empty response' }
+      }
 
       if (!res.ok) {
         throw new Error(data.error || data.message || 'Failed to start call')
