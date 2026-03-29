@@ -1,3 +1,5 @@
+Flask==3.1.1
+Flask-Cors==5.0.1
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.4
 aiosignal==1.4.0

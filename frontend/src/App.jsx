@@ -1,17 +1,16 @@
 import { useState } from 'react'
 import LandingPage from './components/LandingPage'
 import UploadPage from './components/UploadPage'
-import LoadingScreen from './components/LoadingScreen'
+import CallingAgentPage from './components/CallingAgentPage'
 import TrackerPage from './components/TrackerPage'
 
 export default function App() {
   const [page, setPage] = useState('landing')
-  const [uploadedFiles, setUploadedFiles] = useState([])
+  const [jobId, setJobId] = useState(null)
 
-  const handleSubmit = (files) => {
-    setUploadedFiles(files)
-    setPage('loading')
-    setTimeout(() => setPage('tracker'), 3500)
+  const handleSubmit = (jobId) => {
+    setJobId(jobId)
+    setPage('calling_agent')
   }
 
   return (
@@ -25,11 +24,23 @@ export default function App() {
           onSubmit={handleSubmit}
         />
       )}
-      {page === 'loading' && <LoadingScreen />}
-      {page === 'tracker' && (
+      {page === 'calling_agent' && (
+        <CallingAgentPage
+          jobId={jobId}
+          onComplete={(id) => {
+            setJobId(id)
+            setPage('result')
+          }}
+          onError={() => setPage('upload')}
+        />
+      )}
+      {page === 'result' && (
         <TrackerPage
-          files={uploadedFiles}
-          onBack={() => setPage('landing')}
+          jobId={jobId}
+          onBack={() => {
+            setJobId(null)
+            setPage('landing')
+          }}
         />
       )}
     </div>

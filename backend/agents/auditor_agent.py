@@ -28,6 +28,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types as genai_types
 
+from agents.filer_agent import VAFormFiler, FILLED_PDF_NAME
 from schemas import ParsedClaim
 from tools.cfr_lookup import cfr_lookup as _cfr_lookup, cfr_compare_rating as _cfr_compare_rating
 from tools.pact_act_check import pact_act_check as _pact_act_check
@@ -658,9 +659,7 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
     if rule_result.get("rule_based_triggered") and "20-0996" not in all_forms:
         all_forms.append("20-0996")
 
-    # Download and fill each unique form via the Form Filler Agent
-    from agents.form_filler_agent import fill_va_form
-
+    # Download and fill each unique form via VAFormFiler
     filled_form_paths: list[str] = []
     va_form_links: list[dict] = []
 
@@ -669,17 +668,32 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
         audit_result["auditor_notes"] = ""
 
     output_dir = Path(__file__).resolve().parent.parent / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     for form_number in all_forms:
         try:
-            result = fill_va_form(form_number, parsed_claim, output_dir=output_dir)
-            filled_form_paths.append(result["filled_path"])
+            filer = VAFormFiler(backend_dir=output_dir)
+            veteran_name = parsed_claim.veteran_name or ""
+            first_name, _, last_name = veteran_name.partition(" ")
+            veteran_data = {
+                "first_name": first_name,
+                "last_name": last_name,
+                "issue": (
+                    parsed_claim.conditions[0].condition_name
+                    if parsed_claim.conditions
+                    else "Service-connected condition"
+                ),
+            }
+            filer.download_and_fill_hlr(veteran_data)
+            # VAFormFiler saves to backend_dir / FILLED_PDF_NAME
+            filled_path = str(output_dir / FILLED_PDF_NAME)
+            filled_form_paths.append(filled_path)
             va_form_links.append({
                 "form_number": form_number,
-                "filled_path": result["filled_path"],
-                "pdf_url": result["pdf_url"],
-                "fields_found": result["fields_found"],
-                "fields_filled": result["fields_filled"],
+                "filled_path": filled_path,
+                "pdf_url": filer._get_form_pdf_url_from_api(),
+                "fields_found": 0,
+                "fields_filled": 0,
             })
         except Exception as exc:
             audit_result["auditor_notes"] += f" [Form {form_number} download failed: {str(exc)}]"
