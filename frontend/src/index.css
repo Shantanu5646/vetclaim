@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes dot-travel {
+  from { transform: translateX(-24px); }
+  to   { transform: translateX(96px); }
+}
+
+.loading-dot {
+  animation: dot-travel 1.4s linear infinite;
+}
+.loading-dot:nth-child(1) { animation-delay: 0s; }
+.loading-dot:nth-child(2) { animation-delay: -0.47s; }
+.loading-dot:nth-child(3) { animation-delay: -0.93s; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up { animation: fadeInUp 0.6s ease forwards; }
+.fade-in-up-2 { animation: fadeInUp 0.6s ease 0.15s forwards; opacity: 0; }
+.fade-in-up-3 { animation: fadeInUp 0.6s ease 0.3s forwards; opacity: 0; }
+
+@keyframes tracker-fill {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+.tracker-fill {
+  animation: tracker-fill 1.2s ease forwards;
+}
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(201,168,76,0.5); }
+  70%  { box-shadow: 0 0 0 12px rgba(201,168,76,0); }
+  100% { box-shadow: 0 0 0 0 rgba(201,168,76,0); }
+}
+.pulse-gold { animation: pulse-ring 1.5s infinite; }
