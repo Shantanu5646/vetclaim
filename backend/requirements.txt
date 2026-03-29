@@ -4,3 +4,6 @@ reportlab
 pydantic
 python-dotenv
 elevenlabs
+requests
+pypdf
+pdfplumber
