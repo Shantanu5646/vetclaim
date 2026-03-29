@@ -1,1 +1,5 @@
 * text=auto
+
+# Always keep Ismail's version of Kiro workspace files during merges.
+# This prevents pulls from dev/main from deleting specs, hooks, and steering docs.
+.kiro/** merge=ours
