@@ -28,7 +28,6 @@ const PROFILES = {
     },
     appealDeadline: "January 9, 2027",
     documents: [
-      "📄 Rating Decision Letter (Jan 9, 2026)",
       "📄 C&P Exam Results (Dec 2025)",
       "📄 DBQ — PTSD (Dec 2025)",
       "📄 DBQ — TBI (Dec 2025)",
@@ -59,7 +58,6 @@ const PROFILES = {
     },
     appealDeadline: "March 3, 2027",
     documents: [
-      "📄 Rating Decision Letter (Mar 3, 2026)",
       "📄 C&P Exam Results (Feb 2026)",
       "📄 DBQ — Hearing Loss (Feb 2026)",
       "📄 DBQ — PTSD (Jan 2026)",
@@ -92,7 +90,6 @@ const PROFILES = {
     },
     appealDeadline: "January 22, 2027",
     documents: [
-      "📄 Rating Decision Letter (Jan 22, 2026)",
       "📄 C&P Exam Results (Dec 2025)",
       "📄 DBQ — Knee (Dec 2025)",
       "📄 DBQ — PTSD (Nov 2025)",
@@ -186,6 +183,13 @@ function renderProfile(profileKey) {
   const docListEl = document.querySelector(".va-doc-list");
   if (docListEl) {
     docListEl.innerHTML = profile.documents.map(doc => `<li><a href="#">${doc}</a></li>`).join("");
+  }
+
+  // --- Download All button ---
+  // Re-attach listener each time the profile switches so it downloads the right docs
+  const downloadBtn = document.getElementById("download-all-docs");
+  if (downloadBtn) {
+    downloadBtn.onclick = () => downloadAllDocuments(profile);
   }
 
   // --- Clear any existing submission notification (new veteran = fresh state) ---
