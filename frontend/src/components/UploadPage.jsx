@@ -1,114 +1,119 @@
 import { useState, useRef } from 'react'
 
+const NAV_BLUE = '#1B3A6B'
+
 export default function UploadPage({ onBack, onSubmit }) {
   const [files, setFiles] = useState([])
-  const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef()
 
   const handleFile = (newFiles) => {
-    const pdfFiles = Array.from(newFiles).filter(f => f.type === 'application/pdf')
-    setFiles(prev => [...prev, ...pdfFiles])
+    setFiles(prev => [...prev, ...Array.from(newFiles)])
   }
 
-  const handleDrop = (e) => {
-    e.preventDefault()
-    setDragging(false)
-    handleFile(e.dataTransfer.files)
-  }
+  const removeFile = (index) => setFiles(prev => prev.filter((_, i) => i !== index))
 
-  const removeFile = (index) => {
-    setFiles(prev => prev.filter((_, i) => i !== index))
-  }
+  const fmtSize = (b) => b < 1024 * 1024 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1024 / 1024).toFixed(2)} MB`
 
   return (
-    <div className="min-h-screen bg-[#0B1426] flex flex-col">
-      {/* Header */}
-      <header className="flex items-center gap-4 px-8 py-5 border-b border-[#1E3A6E]/50">
-        <button
-          onClick={onBack}
-          className="text-[#8A9BB5] hover:text-white transition-colors flex items-center gap-2 text-sm"
-        >
-          ← Back
-        </button>
-        <span className="text-[#C9A84C] font-black text-lg tracking-widest uppercase">VetClaim</span>
-      </header>
+    <div className="min-h-screen bg-white flex flex-col">
+
+      {/* Nav */}
+      <nav className="border-b border-gray-200 bg-white">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Back
+          </button>
+          <span className="text-gray-300">|</span>
+          <span className="font-bold text-base" style={{ color: NAV_BLUE }}>VetClaim AI</span>
+        </div>
+      </nav>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-6 py-12">
-        <div className="fade-in-up">
-          <h2 className="text-3xl font-bold text-white mb-2">Upload All Required VA Documents</h2>
-          <p className="text-[#8A9BB5] mb-10">Upload your C&P Exam, DBQ, Rating Decision, or any other VA documents. PDF files only, max 10MB each.</p>
+
+        {/* Heading */}
+        <div className="fade-in-up mb-8">
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: NAV_BLUE }}>
+            Step 1 of 3
+          </p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+            Upload Your VA Documents
+          </h1>
+          <p className="text-gray-500 text-sm leading-relaxed">
+            Upload your C&P Exam, DBQ, Rating Decision, or any other VA-related documents.
+          </p>
         </div>
 
-        {/* Drop zone */}
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current.click()}
-          className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-200 cursor-pointer mb-6 fade-in-up-2
-            ${dragging
-              ? 'border-[#C9A84C] bg-[#C9A84C]/10 scale-[1.02]'
-              : 'border-[#1E3A6E] hover:border-[#C9A84C]/50 bg-[#142040]/50 hover:bg-[#142040]'
-            }`}
-        >
+        {/* Browse area */}
+        <div className="fade-in-up-2 mb-6">
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept="application/pdf"
             className="hidden"
             onChange={(e) => handleFile(e.target.files)}
           />
-          <div className="text-5xl mb-3">📄</div>
-          <p className="text-white font-semibold mb-2">
-            {dragging ? 'Drop your files here' : 'Click or drag documents here'}
-          </p>
-          <p className="text-[#8A9BB5] text-sm">PDF files up to 10MB each</p>
+          <button
+            onClick={() => fileInputRef.current.click()}
+            className="w-full py-10 rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100 transition-colors flex flex-col items-center gap-3 text-gray-500 hover:text-gray-700"
+          >
+            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-gray-700">Click to browse files</p>
+              <p className="text-xs text-gray-400 mt-0.5">Any file type accepted</p>
+            </div>
+          </button>
         </div>
 
         {/* File list */}
         {files.length > 0 && (
-          <div className="space-y-3 mb-8 fade-in-up-2">
-            {files.map((file, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between bg-[#142040] border border-[#C9A84C]/30 rounded-xl p-4"
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="text-[#C9A84C] text-xl">✓</div>
+          <div className="fade-in-up mb-8">
+            <p className="text-sm font-semibold text-gray-700 mb-3">
+              {files.length} file{files.length !== 1 ? 's' : ''} selected
+            </p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {files.map((file, idx) => (
+                <div key={idx} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 bg-white">
+                  <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                  </svg>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold truncate">{file.name}</p>
-                    <p className="text-[#8A9BB5] text-xs">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p className="text-sm text-gray-800 font-medium truncate">{file.name}</p>
+                    <p className="text-xs text-gray-400">{fmtSize(file.size)}</p>
                   </div>
+                  <button
+                    onClick={() => removeFile(idx)}
+                    className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
                 </div>
-                <button
-                  onClick={() => removeFile(idx)}
-                  className="text-gray-500 hover:text-red-400 text-xl transition-colors ml-4 flex-shrink-0"
-                  title="Remove"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Submit button */}
+        {/* Submit */}
         <div className="fade-in-up-3">
           <button
             disabled={files.length === 0}
             onClick={() => onSubmit(files)}
-            className={`w-full py-4 rounded-xl font-bold text-base transition-all duration-200
-              ${files.length > 0
-                ? 'bg-[#C9A84C] hover:bg-[#E8C56A] text-[#0B1426] shadow-lg hover:shadow-[#C9A84C]/30 hover:scale-[1.02] active:scale-95'
-                : 'bg-[#1E3A6E]/40 text-gray-600 cursor-not-allowed'
-              }`}
+            className="w-full py-3 rounded-lg font-semibold text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-white"
+            style={{ background: NAV_BLUE }}
+            onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#0F2444' }}
+            onMouseLeave={e => { e.currentTarget.style.background = NAV_BLUE }}
           >
-            Submit {files.length > 0 ? `(${files.length} document${files.length !== 1 ? 's' : ''})` : 'Documents'}
+            {files.length > 0 ? `Submit ${files.length} File${files.length !== 1 ? 's' : ''}` : 'Select files to continue'}
           </button>
-          {files.length === 0 && (
-            <p className="text-center text-[#8A9BB5] text-xs mt-3">Upload at least one document to continue</p>
-          )}
         </div>
       </main>
     </div>

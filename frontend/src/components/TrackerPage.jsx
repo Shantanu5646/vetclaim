@@ -1,137 +1,261 @@
 import { useState, useEffect } from 'react'
 
+const CALLING_AGENT_BASE_URL = import.meta.env.VITE_CALLING_AGENT_URL || 'http://localhost:8000'
+const NAV_BLUE = '#1B3A6B'
+
 const STAGES = [
   {
     id: 0,
-    title: 'Documents Submitted',
-    desc: 'Your documents have been received and logged in our system.',
-    icon: '📥',
-    completeAfter: 0,
+    title: 'Required Documents Submitted',
+    desc: 'Your documents have been received and logged.',
   },
   {
     id: 1,
-    title: 'Documents Being Reviewed',
-    desc: 'Our system is analyzing your C&P Exam, DBQs, and Rating Decision for key findings.',
-    icon: '🔍',
-    completeAfter: 2500,
+    title: 'Documents Under Review',
+    desc: 'AI is analyzing your C&P Exam, DBQ forms, and Rating Decision for key findings.',
   },
   {
     id: 2,
-    title: 'Documents Being Finalized',
-    desc: 'Your document review is complete. A summary report is being prepared for you.',
-    icon: '✅',
-    completeAfter: 5000,
+    title: 'Review Complete',
+    desc: 'Your document review is finished. A summary is ready for your next steps.',
   },
 ]
 
 export default function TrackerPage({ files, onBack }) {
   const [activeStage, setActiveStage] = useState(0)
   const [completedStages, setCompletedStages] = useState(new Set([0]))
+  const [recipientPhone, setRecipientPhone] = useState('8008271000')
+  const [phoneError, setPhoneError] = useState('')
+  const [phoneSuccess, setPhoneSuccess] = useState('')
+  const [isCallingLoading, setIsCallingLoading] = useState(false)
 
   useEffect(() => {
-    const timers = []
-    timers.push(setTimeout(() => {
-      setActiveStage(1)
-      setCompletedStages(new Set([0]))
-    }, 800))
-    timers.push(setTimeout(() => {
-      setCompletedStages(new Set([0, 1]))
-      setActiveStage(2)
-    }, 3200))
-    timers.push(setTimeout(() => {
-      setCompletedStages(new Set([0, 1, 2]))
-    }, 5500))
+    const timers = [
+      setTimeout(() => { setActiveStage(1); setCompletedStages(new Set([0])) }, 800),
+      setTimeout(() => { setCompletedStages(new Set([0, 1])); setActiveStage(2) }, 3200),
+      setTimeout(() => { setCompletedStages(new Set([0, 1, 2])) }, 5500),
+    ]
     return () => timers.forEach(clearTimeout)
   }, [])
 
   const allDone = completedStages.size === 3
   const fileCount = Array.isArray(files) ? files.length : 0
 
+  const handleMakeCall = async () => {
+    setPhoneError('')
+    setPhoneSuccess('')
+    const cleaned = recipientPhone.replace(/\D/g, '')
+    if (cleaned.length < 10) { setPhoneError('Please enter a valid phone number (10+ digits)'); return }
+    setIsCallingLoading(true)
+    try {
+      const res = await fetch(`${CALLING_AGENT_BASE_URL}/call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: recipientPhone }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed to initiate call') }
+      const data = await res.json()
+      setPhoneSuccess(`Call initiated — SID: ${data.call_sid?.slice(0, 12)}...`)
+      setTimeout(() => setPhoneSuccess(''), 4000)
+    } catch (err) {
+      setPhoneError(`Call failed: ${err.message}`)
+    } finally {
+      setIsCallingLoading(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-[#0B1426] flex flex-col">
-      {/* Header */}
-      <header className="flex items-center gap-4 px-8 py-5 border-b border-[#1E3A6E]/50">
-        <button onClick={onBack} className="text-[#8A9BB5] hover:text-white transition-colors flex items-center gap-2 text-sm">
-          ← Back
-        </button>
-        <span className="text-[#C9A84C] font-black text-lg tracking-widest uppercase">VetClaim</span>
-      </header>
+    <div className="min-h-screen bg-white flex flex-col">
+
+      {/* Nav */}
+      <nav className="border-b border-gray-200 bg-white sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
+              </svg>
+              Back
+            </button>
+            <span className="text-gray-300">|</span>
+            <span className="font-bold text-base" style={{ color: NAV_BLUE }}>VetClaim AI</span>
+          </div>
+          <span
+            className="text-xs font-semibold px-3 py-1 rounded-full"
+            style={allDone
+              ? { background: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0' }
+              : { background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}
+          >
+            {allDone ? 'Review Complete' : 'Processing...'}
+          </span>
+        </div>
+      </nav>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-6 py-12">
-        <div className="fade-in-up mb-10">
-          <h2 className="text-3xl font-bold text-white mb-2">Claim Progress</h2>
-          <p className="text-[#8A9BB5] text-sm">
-            {fileCount} document{fileCount !== 1 ? 's' : ''} submitted &nbsp;·&nbsp;
-            {allDone ? 'Review complete' : 'Processing...'}
+
+        {/* Heading */}
+        <div className="fade-in-up mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">Claim Progress</h1>
+          <p className="text-gray-500 text-sm">
+            {fileCount} file{fileCount !== 1 ? 's' : ''} submitted
+            &nbsp;·&nbsp;
+            {allDone ? 'All steps complete' : 'Review in progress'}
           </p>
         </div>
 
-        {/* Timeline */}
-        <div className="relative fade-in-up-2">
-          {/* Vertical line */}
-          <div className="absolute left-5 top-5 w-0.5 bg-[#1E3A6E]" style={{ height: 'calc(100% - 40px)' }} />
+        {/* ── Stepper ── */}
+        <div className="fade-in-up-2 mb-10">
+          <div className="relative">
+            {/* Vertical line */}
+            <div className="absolute left-4 top-8 bottom-8 w-px bg-gray-200" />
 
-          <div className="space-y-6">
-            {STAGES.map((stage) => {
-              const isDone = completedStages.has(stage.id)
-              const isActive = activeStage === stage.id && !isDone
-              return (
-                <div key={stage.id} className={`relative flex gap-6 items-start transition-all duration-500
-                  ${stage.id > activeStage && !isDone ? 'opacity-30' : 'opacity-100'}`}>
-                  {/* Circle */}
-                  <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-base transition-all duration-500 border-2
-                    ${isDone
-                      ? 'bg-[#C9A84C] border-[#C9A84C] text-[#0B1426]'
-                      : isActive
-                      ? 'bg-[#142040] border-[#C9A84C] text-[#C9A84C] pulse-gold'
-                      : 'bg-[#142040] border-[#1E3A6E] text-[#8A9BB5]'
-                    }`}>
-                    {isDone ? '✓' : stage.icon}
-                  </div>
+            <div className="space-y-4">
+              {STAGES.map((stage) => {
+                const isDone    = completedStages.has(stage.id)
+                const isActive  = activeStage === stage.id && !isDone
+                const isPending = !isDone && !isActive
 
-                  {/* Content card */}
-                  <div className={`flex-1 rounded-xl p-5 border transition-all duration-500
-                    ${isDone
-                      ? 'bg-[#C9A84C]/5 border-[#C9A84C]/30'
-                      : isActive
-                      ? 'bg-[#142040] border-[#1E3A6E]'
-                      : 'bg-[#0F1C36] border-[#1E3A6E]/50'
+                return (
+                  <div
+                    key={stage.id}
+                    className="relative flex gap-5 items-start transition-opacity duration-500"
+                    style={{ opacity: isPending ? 0.35 : 1 }}
+                  >
+                    {/* Circle */}
+                    <div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold transition-all duration-500 ${
+                      isDone    ? 'bg-green-600 text-white' :
+                      isActive  ? 'bg-blue-600 text-white' :
+                                  'bg-white border-2 border-gray-300 text-gray-400'
                     }`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className={`font-bold ${isDone ? 'text-[#C9A84C]' : isActive ? 'text-white' : 'text-[#8A9BB5]'}`}>
-                        {stage.title}
-                      </p>
-                      {isDone && <span className="text-xs text-[#C9A84C] font-semibold bg-[#C9A84C]/10 px-2 py-0.5 rounded-full">Complete</span>}
-                      {isActive && <span className="text-xs text-blue-400 font-semibold bg-blue-400/10 px-2 py-0.5 rounded-full animate-pulse">In Progress</span>}
+                      {isDone ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                      ) : isActive ? (
+                        <svg className="w-4 h-4 spin-cw" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                      ) : stage.id + 1}
                     </div>
-                    <p className="text-[#8A9BB5] text-sm leading-relaxed">{stage.desc}</p>
 
-                    {/* Progress bar for active stage */}
-                    {isActive && (
-                      <div className="mt-3 h-1 bg-[#1E3A6E] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#C9A84C] rounded-full tracker-fill" />
+                    {/* Card */}
+                    <div className={`flex-1 rounded-lg px-5 py-4 border transition-all duration-500 ${
+                      isDone   ? 'bg-green-50 border-green-200' :
+                      isActive ? 'bg-blue-50 border-blue-200' :
+                                 'bg-white border-gray-200'
+                    }`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className={`font-semibold text-sm ${
+                          isDone ? 'text-green-800' : isActive ? 'text-blue-800' : 'text-gray-400'
+                        }`}>
+                          {stage.title}
+                        </p>
+                        {isDone   && <span className="text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Done</span>}
+                        {isActive && <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full animate-pulse">In Progress</span>}
+                        {isPending && <span className="text-xs text-gray-400">Pending</span>}
                       </div>
-                    )}
+                      <p className={`text-xs leading-relaxed ${
+                        isDone ? 'text-green-700' : isActive ? 'text-blue-700' : 'text-gray-400'
+                      }`}>
+                        {stage.desc}
+                      </p>
+                      {isActive && (
+                        <div className="mt-3 h-1 bg-blue-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded-full tracker-fill" />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Final message */}
+        {/* ── VA Call Card ── */}
+        <div className="fade-in-up-3 mb-8 border border-gray-200 rounded-xl p-6 bg-white">
+          <h2 className="text-base font-bold text-gray-900 mb-1">Call the VA</h2>
+          <p className="text-gray-500 text-xs mb-4">
+            Our agent calls 1-800-827-1000 and reads your automated claim status request.
+          </p>
+
+          <label className="block text-xs font-semibold text-gray-700 mb-1.5">Phone Number</label>
+          <input
+            type="tel"
+            value={recipientPhone}
+            onChange={(e) => setRecipientPhone(e.target.value)}
+            disabled={isCallingLoading}
+            className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none mb-4 focus:border-blue-400 transition-colors disabled:opacity-50"
+          />
+
+          {phoneSuccess && (
+            <div className="mb-4 px-4 py-3 rounded-lg text-xs text-green-700 bg-green-50 border border-green-200">
+              {phoneSuccess}
+            </div>
+          )}
+          {phoneError && (
+            <div className="mb-4 px-4 py-3 rounded-lg text-xs text-red-700 bg-red-50 border border-red-200">
+              {phoneError}
+            </div>
+          )}
+
+          <button
+            onClick={handleMakeCall}
+            disabled={isCallingLoading || !recipientPhone.trim()}
+            className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: NAV_BLUE }}
+            onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#0F2444' }}
+            onMouseLeave={e => { e.currentTarget.style.background = NAV_BLUE }}
+          >
+            {isCallingLoading ? (
+              <>
+                <svg className="w-4 h-4 spin-cw" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                Initiating Call...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                </svg>
+                Initiate VA Call
+              </>
+            )}
+          </button>
+          <p className="text-center text-xs text-gray-400 mt-2">Requires Twilio credentials & ngrok</p>
+        </div>
+
+        {/* All done */}
         {allDone && (
-          <div className="mt-10 bg-[#C9A84C]/10 border border-[#C9A84C]/30 rounded-2xl p-6 text-center fade-in-up">
-            <div className="text-4xl mb-3">🎖️</div>
-            <h3 className="text-xl font-bold text-[#C9A84C] mb-2">Review Complete</h3>
-            <p className="text-[#8A9BB5] text-sm max-w-sm mx-auto mb-6">
-              Your documents have been reviewed. Contact the VA for any questions about your claim.
+          <div className="fade-in-up bg-green-50 border border-green-200 rounded-xl p-6 text-center mb-6">
+            <div className="text-3xl mb-3">🎖️</div>
+            <h3 className="text-base font-bold text-green-900 mb-1">Review Complete</h3>
+            <p className="text-green-700 text-sm mb-4">
+              Your documents have been reviewed. Contact the VA or a VSO for next steps.
             </p>
             <button
               onClick={onBack}
-              className="bg-[#C9A84C] hover:bg-[#E8C56A] text-[#0B1426] font-bold px-8 py-3 rounded-xl transition-all hover:scale-105 active:scale-95"
+              className="px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors"
+              style={{ background: NAV_BLUE }}
+              onMouseEnter={e => e.currentTarget.style.background = '#0F2444'}
+              onMouseLeave={e => e.currentTarget.style.background = NAV_BLUE}
             >
-              Submit Another Claim
+              Back to Home
+            </button>
+          </div>
+        )}
+
+        {!allDone && (
+          <div className="text-center">
+            <button
+              onClick={onBack}
+              className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              ← Back to Home
             </button>
           </div>
         )}
