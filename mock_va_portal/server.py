@@ -150,6 +150,34 @@ def index():
     return send_file("index.html")
 
 
+@app.route("/testcase/<veteran>/<filename>")
+def serve_testcase_pdf(veteran: str, filename: str):
+    """
+    Serve a PDF from the testcase/ folder so the dashboard can link to
+    real claim documents for the demo veterans.
+
+    WHY: The testcase PDFs live outside mock_va_portal/ so Flask's static
+    file serving doesn't reach them. This route bridges that gap without
+    moving the files or changing the project structure.
+
+    Example: GET /testcase/james_millner/james_miller_decision_letter.pdf
+    """
+    # Build the path relative to this file: ../testcase/<veteran>/<filename>
+    testcase_dir = os.path.join(os.path.dirname(__file__), "..", "testcase")
+    pdf_path = os.path.realpath(os.path.join(testcase_dir, veteran, filename))
+
+    # Security: ensure the resolved path stays inside the testcase directory.
+    # This prevents path traversal attacks (e.g. ../../etc/passwd).
+    safe_root = os.path.realpath(testcase_dir)
+    if not pdf_path.startswith(safe_root):
+        abort(403)
+
+    if not os.path.exists(pdf_path):
+        abort(404)
+
+    return send_file(pdf_path, mimetype="application/pdf", as_attachment=False)
+
+
 if __name__ == "__main__":
     print("=" * 50)
     print("Mock VA Portal server running at http://localhost:5050")

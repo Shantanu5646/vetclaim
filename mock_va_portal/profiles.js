@@ -32,12 +32,12 @@ const PROFILES = {
     },
     appealDeadline: "November 15, 2024",
     documents: [
-      "📄 Rating Decision Letter (Nov 15, 2023)",
-      "📄 C&P Exam — Combined DBQs (Aug 14, 2023)",
-      "📄 DBQ — PTSD Review (Aug 14, 2023)",
-      "📄 DBQ — Ear Conditions / Vestibular (2023)",
-      "📄 DBQ — ALS (2023)",
-      "📄 Personal Statement / VA Form 21-0781 (Jan 2023)",
+      { name: "📄 Rating Decision Letter (Nov 15, 2023)",        url: "/testcase/james_millner/james_miller_decision_letter.pdf" },
+      { name: "📄 C&P Exam — Combined DBQs (Aug 14, 2023)",      url: "/testcase/james_millner/C&P_Exam_Combined_DBQs.pdf" },
+      { name: "📄 DBQ — PTSD Review (Aug 14, 2023)",             url: "/testcase/james_millner/james_miller_personal_statement.pdf" },
+      { name: "📄 DBQ — Ear Conditions / Vestibular (2023)",     url: "/testcase/james_millner/james_miller_ear_dbq.pdf" },
+      { name: "📄 DBQ — ALS (2023)",                             url: "/testcase/james_millner/DBQ_ALS_James_Milner_SAMPLE.pdf" },
+      { name: "📄 Personal Statement / VA Form 21-0781 (Jan 2023)", url: "/testcase/james_millner/james_miller_personal_statement.pdf" },
     ],
     deniedCount: 2,
     conditions: [
@@ -70,11 +70,11 @@ const PROFILES = {
     },
     appealDeadline: "December 6, 2024",
     documents: [
-      "📄 Rating Decision Letter (Dec 6, 2023)",
-      "📄 C&P Exam Results (2023)",
-      "📄 DBQ — Amputation / Residuals (Dr. Park, Oct 18, 2023)",
-      "📄 DBQ — PTSD (Dr. Webb, Oct 11, 2023)",
-      "📄 DBQ — Arthritis / DJD (Dr. Busch, Sep 5, 2023)",
+      { name: "📄 Rating Decision Letter (Dec 6, 2023)",         url: "/testcase/robert-graza/Rating_Decision_Robert_Garza_SAMPLE.pdf" },
+      { name: "📄 C&P Exam Results (2023)",                      url: "/testcase/robert-graza/CP_Exam_Robert_Garza_SAMPLE.pdf" },
+      { name: "📄 DBQ — Amputation / Residuals (Oct 18, 2023)",  url: "/testcase/robert-graza/DBQ_Amputation_Robert_Garza_SAMPLE.pdf" },
+      { name: "📄 DBQ — PTSD (Oct 11, 2023)",                    url: "/testcase/robert-graza/DBQ_PTSD_Robert_Garza_SAMPLE.pdf" },
+      { name: "📄 DBQ — Arthritis / DJD (Sep 5, 2023)",          url: "/testcase/robert-graza/DBQ_Arthritis_Robert_Garza_SAMPLE.pdf" },
     ],
     deniedCount: 2,
     conditions: [
@@ -104,10 +104,10 @@ const PROFILES = {
     },
     appealDeadline: "January 9, 2027",
     documents: [
-      "📄 Rating Decision Letter (Jan 9, 2026)",
-      "📄 C&P Exam Results (Dec 2025)",
-      "📄 DBQ — PTSD (Dec 2025)",
-      "📄 DBQ — TBI (Dec 2025)",
+      { name: "📄 Rating Decision Letter (Jan 9, 2026)", url: "#" },
+      { name: "📄 C&P Exam Results (Dec 2025)",          url: "#" },
+      { name: "📄 DBQ — PTSD (Dec 2025)",                url: "#" },
+      { name: "📄 DBQ — TBI (Dec 2025)",                 url: "#" },
     ],
     deniedCount: 2,
     conditions: [
@@ -200,7 +200,9 @@ function renderProfile(profileKey) {
   // --- Claim documents ---
   const docListEl = document.querySelector(".va-doc-list");
   if (docListEl) {
-    docListEl.innerHTML = profile.documents.map(doc => `<li><a href="#">${doc}</a></li>`).join("");
+    docListEl.innerHTML = profile.documents.map(doc => `
+      <li><a href="${doc.url}" target="_blank">${doc.name}</a></li>
+    `).join("");
   }
 
   // --- Download All button ---
