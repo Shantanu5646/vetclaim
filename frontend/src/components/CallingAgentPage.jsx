@@ -1,67 +1,62 @@
 import { useState } from 'react'
 
-const BACKEND_URL = import.meta.env.VITE_CALLING_AGENT_URL || 'http://localhost:8000'
 const NAV_BLUE = '#1B3A6B'
 
-const CLAIM_TYPES = [
-  'disability',
-  'disability increase',
-  'new claim',
-  'appeal',
-  'supplemental claim',
-]
-
 export default function CallingAgentPage({ onBack }) {
-  const [form, setForm] = useState({
-    customer_number: '',
-    full_name: '',
-    last_four_ssn: '',
-    va_file_number: '',
-    claim_date: '',
-    claim_type: 'disability',
-  })
   const [status, setStatus] = useState('idle') // idle | loading | success | error
-  const [callId, setCallId] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
-  const [callRecord, setCallRecord] = useState(null)
-
-  const update = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const [callData, setCallData] = useState(null) // { summary, transcript, duration_seconds, ended_reason }
+  const [fetchingTranscript, setFetchingTranscript] = useState(false)
+  const [callInitiated, setCallInitiated] = useState(false)
+  const [transcriptOpen, setTranscriptOpen] = useState(false)
 
   const handleCall = async () => {
-    if (!form.customer_number.trim()) {
-      setErrorMsg('Phone number is required.')
-      return
-    }
     setStatus('loading')
     setErrorMsg('')
-    setCallRecord(null)
+    setCallData(null)
 
     try {
-      const res = await fetch(`${BACKEND_URL}/start-va-call`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
+      const res = await fetch('/api/call-va', { method: 'POST' })
       const data = await res.json()
 
-      if (!res.ok) {
-        throw new Error(data.error || data.message || 'Failed to start call')
+      if (!res.ok || data.status === 'error') {
+        throw new Error(data.message || data.error || 'Failed to start call')
       }
 
-      setCallId(data.call_id)
       setStatus('success')
+      setCallInitiated(true)
     } catch (err) {
       setErrorMsg(err.message)
       setStatus('error')
+      setCallInitiated(true)
     }
   }
 
-  const fetchRecord = async () => {
-    if (!callId) return
+  const fetchTranscript = async () => {
+    setFetchingTranscript(true)
     try {
-      const res = await fetch(`${BACKEND_URL}/calls/${callId}`)
-      if (res.ok) setCallRecord(await res.json())
-    } catch (_) {}
+      const res = await fetch('/api/get-transcript')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch transcript')
+      setCallData({
+        summary: data.summary || '',
+        transcript: data.transcript || 'No transcript available yet.',
+        duration_seconds: data.duration_seconds,
+        ended_reason: data.ended_reason,
+      })
+      setTranscriptOpen(true)
+    } catch (err) {
+      setCallData({ summary: '', transcript: `Error: ${err.message}` })
+    } finally {
+      setFetchingTranscript(false)
+    }
+  }
+
+  const fmtDuration = (secs) => {
+    if (!secs) return null
+    const m = Math.floor(secs / 60)
+    const s = Math.round(secs % 60)
+    return `${m}m ${s}s`
   }
 
   return (
@@ -90,8 +85,7 @@ export default function CallingAgentPage({ onBack }) {
         <div className="fade-in-up mb-8">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Initiate VA Call</h1>
           <p className="text-gray-500 text-sm leading-relaxed">
-            Our AI agent will call <strong>your phone</strong> first, read a consent disclosure,
-            then connect to the VA and request a status update on your behalf.
+            Our AI agent will call the VA representative on your behalf and provide a full transcript when the call ends.
           </p>
         </div>
 
@@ -107,86 +101,6 @@ export default function CallingAgentPage({ onBack }) {
           </p>
         </div>
 
-        {/* Form */}
-        <div className="fade-in-up-2 space-y-5 mb-8">
-          {/* Phone */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-              Your Phone Number <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="tel"
-              placeholder="+1 (555) 123-4567"
-              value={form.customer_number}
-              onChange={e => update('customer_number', e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none focus:border-blue-400 transition-colors"
-            />
-            <p className="text-xs text-gray-400 mt-1">Vapi will call this number first</p>
-          </div>
-
-          {/* Name */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Full Name</label>
-            <input
-              type="text"
-              placeholder="John Smith"
-              value={form.full_name}
-              onChange={e => update('full_name', e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none focus:border-blue-400 transition-colors"
-            />
-          </div>
-
-          {/* SSN + File number row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Last 4 of SSN</label>
-              <input
-                type="text"
-                placeholder="1234"
-                maxLength={4}
-                value={form.last_four_ssn}
-                onChange={e => update('last_four_ssn', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none focus:border-blue-400 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">VA File Number</label>
-              <input
-                type="text"
-                placeholder="Optional"
-                value={form.va_file_number}
-                onChange={e => update('va_file_number', e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none focus:border-blue-400 transition-colors"
-              />
-            </div>
-          </div>
-
-          {/* Claim date + type row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Claim Submitted Date</label>
-              <input
-                type="date"
-                value={form.claim_date}
-                onChange={e => update('claim_date', e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none focus:border-blue-400 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Claim Type</label>
-              <select
-                value={form.claim_type}
-                onChange={e => update('claim_type', e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-900 outline-none focus:border-blue-400 transition-colors bg-white"
-              >
-                {CLAIM_TYPES.map(t => (
-                  <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
         {/* Error */}
         {errorMsg && (
           <div className="mb-6 px-4 py-3 rounded-lg text-xs text-red-700 bg-red-50 border border-red-200">
@@ -198,13 +112,12 @@ export default function CallingAgentPage({ onBack }) {
         {status === 'success' && (
           <div className="mb-6 px-4 py-3 rounded-lg text-xs text-green-700 bg-green-50 border border-green-200 space-y-1">
             <p className="font-semibold">Call initiated successfully!</p>
-            <p>Call ID: <span className="font-mono">{callId}</span></p>
             <p>Vapi is calling your phone now. Answer it to begin.</p>
           </div>
         )}
 
-        {/* Submit button */}
-        <div className="fade-in-up-3">
+        {/* Initiate Call button */}
+        <div className="fade-in-up-2">
           <button
             onClick={handleCall}
             disabled={status === 'loading'}
@@ -231,86 +144,91 @@ export default function CallingAgentPage({ onBack }) {
           </button>
         </div>
 
-        {/* Post-call record fetch */}
-        {callId && status === 'success' && (
-          <div className="mt-8">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-gray-700">Call Record</p>
-              <button
-                onClick={fetchRecord}
-                className="text-xs font-medium underline transition-colors"
-                style={{ color: NAV_BLUE }}
-              >
-                Refresh
-              </button>
-            </div>
+        {/* Post-call section */}
+        {callInitiated && (
+          <div className="mt-8 space-y-4">
 
-            {callRecord ? (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3 text-xs">
-                {/* Status */}
-                <div>
-                  <p className="font-semibold text-gray-700 mb-0.5">Status</p>
-                  <p className="text-gray-600">{callRecord.status || '—'}</p>
+            {/* Fetch button */}
+            {!callData && (
+              <div className="text-center">
+                <p className="text-xs text-gray-400 mb-3">
+                  After the call ends, click below to load the summary and transcript.
+                </p>
+                <button
+                  onClick={fetchTranscript}
+                  disabled={fetchingTranscript}
+                  className="px-5 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ background: NAV_BLUE }}
+                >
+                  {fetchingTranscript ? 'Loading...' : 'Get Call Summary & Transcript'}
+                </button>
+              </div>
+            )}
+
+            {callData && (
+              <>
+                {/* Call meta */}
+                <div className="flex gap-3 text-xs text-gray-400">
+                  {callData.duration_seconds && (
+                    <span>Duration: <strong className="text-gray-600">{fmtDuration(callData.duration_seconds)}</strong></span>
+                  )}
+                  {callData.ended_reason && (
+                    <span>Ended: <strong className="text-gray-600">{callData.ended_reason}</strong></span>
+                  )}
                 </div>
 
-                {/* Claim status from summary */}
-                {callRecord.summary?.claim_status && (
-                  <div>
-                    <p className="font-semibold text-gray-700 mb-0.5">Claim Status</p>
-                    <p className="text-gray-600">{callRecord.summary.claim_status}</p>
+                {/* Summary card */}
+                {callData.summary ? (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-blue-500 mb-2">Call Summary</p>
+                    <p className="text-sm text-blue-900 leading-relaxed whitespace-pre-wrap">{callData.summary}</p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-xs text-gray-400">No summary available yet — the call may still be processing.</p>
                   </div>
                 )}
 
-                {/* Evidence needed */}
-                {callRecord.summary?.evidence_needed?.length > 0 && (
-                  <div>
-                    <p className="font-semibold text-gray-700 mb-0.5">Evidence Needed</p>
-                    <ul className="list-disc list-inside text-gray-600 space-y-0.5">
-                      {callRecord.summary.evidence_needed.map((e, i) => <li key={i}>{e}</li>)}
-                    </ul>
-                  </div>
-                )}
+                {/* Collapsible transcript */}
+                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => setTranscriptOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <span>Full Transcript</span>
+                    <svg
+                      className={`w-4 h-4 text-gray-400 transition-transform ${transcriptOpen ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
+                  {transcriptOpen && (
+                    <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
+                      <pre className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed font-sans mt-3">
+                        {callData.transcript}
+                      </pre>
+                    </div>
+                  )}
+                </div>
 
-                {/* Next steps */}
-                {callRecord.summary?.next_steps && (
-                  <div>
-                    <p className="font-semibold text-gray-700 mb-0.5">Next Steps</p>
-                    <p className="text-gray-600">{callRecord.summary.next_steps}</p>
-                  </div>
-                )}
-
-                {/* Transcript */}
-                {callRecord.transcript && (
-                  <div>
-                    <p className="font-semibold text-gray-700 mb-0.5">Transcript</p>
-                    <pre className="text-gray-600 whitespace-pre-wrap leading-relaxed font-sans">
-                      {callRecord.transcript}
-                    </pre>
-                  </div>
-                )}
-
-                {/* Recording */}
-                {callRecord.recording_url && (
-                  <div>
-                    <p className="font-semibold text-gray-700 mb-1">Recording</p>
-                    <audio controls src={callRecord.recording_url} className="w-full" />
-                  </div>
-                )}
-
-                {(!callRecord.summary && !callRecord.transcript) && (
-                  <p className="text-gray-400 italic">
-                    Call may still be in progress. Click Refresh after the call ends.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400">Click Refresh after the call ends to see the transcript and summary.</p>
+                {/* Refresh button */}
+                <div className="text-center">
+                  <button
+                    onClick={fetchTranscript}
+                    disabled={fetchingTranscript}
+                    className="text-xs underline text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                  >
+                    {fetchingTranscript ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
+              </>
             )}
           </div>
         )}
 
-        <p className="text-center text-xs text-gray-400 mt-8">
-          Powered by Vapi · Requires VAPI_API_KEY and VAPI_PHONE_NUMBER_ID in .env
+        <p className="text-center text-xs text-gray-400 mt-10">
+          Powered by Vapi · Requires VAPI_PRIVATE_KEY in .env
         </p>
       </main>
     </div>

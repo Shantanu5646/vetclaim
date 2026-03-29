@@ -5,22 +5,32 @@ const NAV_BLUE = '#1B3A6B'
 const STAGES = [
   {
     id: 0,
-    title: 'Required Documents Submitted',
-    desc: 'Your documents have been received and logged.',
+    title: 'Documents Received',
+    desc: 'Your PDFs have been securely uploaded and queued for processing.',
   },
   {
     id: 1,
-    title: 'Documents Under Review',
-    desc: 'AI is analyzing your C&P Exam, DBQ forms, and Rating Decision for key findings.',
+    title: 'Extracting Claim Data',
+    desc: 'Parsing your C&P Exam, DBQ forms, and Rating Decisions to pull out disability conditions, assigned ratings, and diagnostic codes.',
   },
   {
     id: 2,
-    title: 'Review Complete',
-    desc: 'Your document review is finished. A summary is ready for your next steps.',
+    title: 'AI Audit Running',
+    desc: 'Claude AI is cross-referencing your conditions against 38 CFR Part 4, PACT Act eligibility rules, combined rating math, and TDIU criteria.',
+  },
+  {
+    id: 3,
+    title: 'Pre-Filling VA Forms',
+    desc: 'Generating pre-filled appeal forms (21-526EZ, 20-0995, 20-0996) based on the findings from your audit.',
+  },
+  {
+    id: 4,
+    title: 'Audit Complete',
+    desc: 'Your full report is ready — corrected ratings, potential benefit increases, and downloadable forms.',
   },
 ]
 
-export default function TrackerPage({ files, jobId, onBack, onCallClick, onViewAudit }) {
+export default function TrackerPage({ files, jobId, onBack, onViewAudit }) {
   const [activeStage, setActiveStage] = useState(0)
   const [completedStages, setCompletedStages] = useState(new Set([0]))
   const [pipelineResult, setPipelineResult] = useState(null)
@@ -31,8 +41,10 @@ export default function TrackerPage({ files, jobId, onBack, onCallClick, onViewA
       // No real job — fall back to demo simulation
       const timers = [
         setTimeout(() => { setActiveStage(1); setCompletedStages(new Set([0])) }, 800),
-        setTimeout(() => { setCompletedStages(new Set([0, 1])); setActiveStage(2) }, 3200),
-        setTimeout(() => { setCompletedStages(new Set([0, 1, 2])) }, 5500),
+        setTimeout(() => { setActiveStage(2); setCompletedStages(new Set([0, 1])) }, 3000),
+        setTimeout(() => { setActiveStage(3); setCompletedStages(new Set([0, 1, 2])) }, 5500),
+        setTimeout(() => { setActiveStage(4); setCompletedStages(new Set([0, 1, 2, 3])) }, 7500),
+        setTimeout(() => { setCompletedStages(new Set([0, 1, 2, 3, 4])) }, 9000),
       ]
       return () => timers.forEach(clearTimeout)
     }
@@ -45,14 +57,18 @@ export default function TrackerPage({ files, jobId, onBack, onCallClick, onViewA
         const data = JSON.parse(e.data)
         const { step } = data
 
-        if (step === 'parsing_documents' || step === 'running_audit') {
+        if (step === 'parsing_documents') {
           setActiveStage(1)
           setCompletedStages(new Set([0]))
-        } else if (step === 'filling_forms') {
+        } else if (step === 'running_audit') {
           setActiveStage(2)
           setCompletedStages(new Set([0, 1]))
-        } else if (step === 'complete') {
+        } else if (step === 'filling_forms') {
+          setActiveStage(3)
           setCompletedStages(new Set([0, 1, 2]))
+        } else if (step === 'complete') {
+          setActiveStage(4)
+          setCompletedStages(new Set([0, 1, 2, 3]))
           es.close()
           // Poll until result is ready (may be 202 for a moment)
           const poll = () => {
@@ -61,7 +77,12 @@ export default function TrackerPage({ files, jobId, onBack, onCallClick, onViewA
                 if (r.status === 202) { setTimeout(poll, 1500); return null }
                 return r.ok ? r.json() : Promise.reject(r.status)
               })
-              .then(result => { if (result) setPipelineResult(result) })
+              .then(result => {
+                if (result) {
+                  setPipelineResult(result)
+                  setCompletedStages(new Set([0, 1, 2, 3, 4]))
+                }
+              })
               .catch(() => setPipelineError('Could not load audit results.'))
           }
           poll()
@@ -80,7 +101,14 @@ export default function TrackerPage({ files, jobId, onBack, onCallClick, onViewA
     return () => es.close()
   }, [jobId])
 
-  const allDone = completedStages.size === 3
+  // Auto-redirect to results as soon as the result is loaded
+  useEffect(() => {
+    if (pipelineResult) {
+      onViewAudit(pipelineResult)
+    }
+  }, [pipelineResult])
+
+  const allDone = completedStages.size === 5
   const fileCount = Array.isArray(files) ? files.length : 0
 
   return (
@@ -192,28 +220,6 @@ export default function TrackerPage({ files, jobId, onBack, onCallClick, onViewA
               })}
             </div>
           </div>
-        </div>
-
-        {/* ── VA Calling Agent ── */}
-        <div className="fade-in-up-3 mb-8 border border-gray-200 rounded-xl p-6 bg-white">
-          <h2 className="text-base font-bold text-gray-900 mb-1">Call the VA</h2>
-          <p className="text-gray-500 text-xs mb-4">
-            Our AI agent calls your phone, reads a consent disclosure, then connects to
-            1-800-827-1000 and requests a status update on your behalf. Transcript and
-            summary are saved automatically.
-          </p>
-          <button
-            onClick={onCallClick}
-            className="w-full py-2.5 rounded-lg font-semibold text-sm text-white transition-colors flex items-center justify-center gap-2"
-            style={{ background: NAV_BLUE }}
-            onMouseEnter={e => e.currentTarget.style.background = '#0F2444'}
-            onMouseLeave={e => e.currentTarget.style.background = NAV_BLUE}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-            </svg>
-            Open VA Calling Agent
-          </button>
         </div>
 
         {/* ── Pipeline error ── */}

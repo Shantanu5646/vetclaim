@@ -11,41 +11,27 @@ Routes:
 
 from __future__ import annotations
 
-import sys
-
-# ---------------------------------------------------------------------------
-# Python version guard — google-adk requires 3.13+.
-# If launched by Anaconda or any older interpreter, re-exec using the venv.
-# ---------------------------------------------------------------------------
-if sys.version_info < (3, 13):
-    import os as _os
-    from pathlib import Path as _Path
-    _root = _Path(__file__).resolve().parent.parent
-    _venv_py = _root / "venv" / "bin" / "python3"          # macOS / Linux
-    if not _venv_py.exists():
-        _venv_py = _root / "venv" / "Scripts" / "python.exe"  # Windows
-    if _venv_py.exists():
-        _os.execv(str(_venv_py), [str(_venv_py)] + sys.argv)
-    else:
-        sys.exit(
-            f"ERROR: Python {sys.version} is too old (need 3.13+) and no venv "
-            f"found at {_root / 'venv'}.\n"
-            "Run: python3.13 -m venv venv && venv/bin/pip install -r requirements.txt"
-        )
-
 import json
 import os
 import queue
+import sys
 import tempfile
 import threading
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
-
+import requests
+from flask import jsonify
+from dotenv import load_dotenv
+from google import genai as _genai
+from google.genai import types as _genai_types
 # ---------------------------------------------------------------------------
 # sys.path — ensure project root is importable so agent modules resolve
 # ---------------------------------------------------------------------------
+
+load_dotenv()
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 # Also insert backend dir so `from schemas import ...` works inside agents
@@ -69,6 +55,26 @@ _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 _MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 # ---------------------------------------------------------------------------
+# Reference data (loaded once at startup for chat context)
+# ---------------------------------------------------------------------------
+
+_DATA_DIR = _BACKEND_DIR / "data"
+
+def _load_json(name: str) -> dict:
+    try:
+        return json.loads((_DATA_DIR / name).read_text())
+    except Exception:
+        return {}
+
+_CFR_DATA        = _load_json("cfr38_part4.json")
+_PACT_DATA       = _load_json("pact_act_conditions.json")
+_PAY_DATA        = _load_json("va_pay_rates_2026.json")
+_COMBINED_DATA   = _load_json("combined_ratings_table.json")
+
+# Gemini client (for /api/chat)
+_gemini = _genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# ---------------------------------------------------------------------------
 # Job store
 # ---------------------------------------------------------------------------
 
@@ -83,6 +89,22 @@ class JobRecord:
 
 
 jobs: dict[str, JobRecord] = {}
+
+_JOBS_DIR = _BACKEND_DIR / "jobs"
+_JOBS_DIR.mkdir(parents=True, exist_ok=True)
+
+def _persist_job(job: JobRecord) -> None:
+    try:
+        (_JOBS_DIR / f"{job.job_id}.json").write_text(json.dumps(job.result))
+    except Exception:
+        pass
+
+def _load_job_result(job_id: str) -> dict | None:
+    p = _JOBS_DIR / f"{job_id}.json"
+    try:
+        return json.loads(p.read_text()) if p.exists() else None
+    except Exception:
+        return None
 
 # ---------------------------------------------------------------------------
 # Pipeline thread
@@ -113,6 +135,7 @@ def _run_pipeline(job: JobRecord) -> None:
         # Step 4 — Complete
         job.result = result
         job.status = "complete"
+        _persist_job(job)
         emit("complete", "Audit complete. Redirecting to results...")
 
     except Exception as exc:  # noqa: BLE001
@@ -203,6 +226,9 @@ def result(job_id: str):
     """Return audit result JSON, or 202 if still running, or 404 if unknown."""
     job = jobs.get(job_id)
     if job is None:
+        saved = _load_job_result(job_id)
+        if saved:
+            return jsonify(saved), 200
         return jsonify({"error": "Job not found"}), 404
 
     if job.status == "running":
@@ -233,71 +259,247 @@ def download():
     return send_file(abs_path, as_attachment=True, download_name=os.path.basename(abs_path))
 
 
-@app.route("/api/submit-appeal", methods=["POST"])
-def submit_appeal():
-    """Forward the first filled PDF for a completed job to the mock VA portal."""
-    import requests as _req
-
-    data = request.get_json(force=True, silent=True) or {}
-    job_id = data.get("job_id")
-    if not job_id:
-        return jsonify({"error": "job_id required"}), 400
-
-    job = jobs.get(job_id)
-    if job is None:
-        return jsonify({"error": "Job not found"}), 404
-    if job.status != "complete" or job.result is None:
-        return jsonify({"error": "Job not yet complete"}), 409
-
-    result = job.result
-    audit_result = result.get("audit_result", {})
-    va_form_links = result.get("va_form_links", [])
-
-    if not va_form_links:
-        return jsonify({"error": "No filled forms available to submit"}), 400
-
-    veteran_name = audit_result.get("veteran_name", "Unknown Veteran")
-    conditions = ", ".join(
-        f"{f.get('condition_name', '')} (DC {f.get('diagnostic_code', '')})"
-        for f in audit_result.get("flags", [])
-        if isinstance(f, dict) and f.get("condition_name")
-    )[:300] or "Service-connected conditions"
-
-    filled_path = va_form_links[0]["filled_path"]
-    if not os.path.isfile(filled_path):
-        return jsonify({"error": "Filled PDF file not found on disk"}), 500
-
-    # Pass all form numbers so the VA portal can build the correct documents list
-    form_numbers = ",".join(link["form_number"] for link in va_form_links)
-
-    try:
-        with open(filled_path, "rb") as pdf_fp:
-            portal_resp = _req.post(
-                "http://localhost:5050/submit-appeal",
-                files={"file": (os.path.basename(filled_path), pdf_fp, "application/pdf")},
-                data={
-                    "veteran_name": veteran_name,
-                    "conditions": conditions,
-                    "forms": form_numbers,
-                },
-                timeout=30,
-            )
-        if portal_resp.ok:
-            return jsonify(portal_resp.json()), 201
-        return jsonify({"error": f"VA portal returned {portal_resp.status_code}"}), 502
-    except Exception as exc:
-        return jsonify({"error": f"Could not reach VA portal: {exc}"}), 502
-
-
 @app.route("/api/status", methods=["GET"])
 def status():
     """Health check endpoint."""
     return jsonify({"status": "OK", "service": "VetClaim Backend"}), 200
 
 
+@app.route("/api/submit-appeal", methods=["POST"])
+def submit_appeal():
+    """Proxy: forward the veteran's filled PDF(s) to the mock VA portal at localhost:5050."""
+    data = request.get_json(force=True) or {}
+    job_id = data.get("job_id")
+    job = jobs.get(job_id) if job_id else None
+    result = (job.result if job else None) or (job_id and _load_job_result(job_id))
+
+    if not result:
+        return jsonify({"error": "Job not found or not complete"}), 404
+    audit = result.get("audit_result", {})
+    veteran_name = audit.get("veteran_name", "Unknown Veteran")
+    conditions = ", ".join(
+        f.get("condition_name", "") for f in audit.get("flags", []) if f.get("condition_name")
+    )
+
+    # Collect filled PDF paths from the job result
+    form_links = result.get("va_form_links", [])
+    pdf_path = None
+    form_numbers = []
+    for link in form_links:
+        p = link.get("filled_path", "")
+        if p and os.path.isfile(p):
+            if pdf_path is None:
+                pdf_path = p
+            form_numbers.append(link.get("form_number", ""))
+
+    if not pdf_path:
+        return jsonify({"error": "No filled PDF found for this job"}), 404
+
+    try:
+        with open(pdf_path, "rb") as f:
+            resp = requests.post(
+                "http://localhost:5050/submit-appeal",
+                files={"file": (os.path.basename(pdf_path), f, "application/pdf")},
+                data={
+                    "veteran_name": veteran_name,
+                    "conditions": conditions,
+                    "forms": ",".join(form_numbers),
+                },
+                timeout=10,
+            )
+        resp.raise_for_status()
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "VA portal unreachable — is it running on port 5050?"}), 502
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+@app.route('/api/call-va', methods=['POST'])
+def call_va_rep():
+    url = "https://api.vapi.ai/call/phone"
+    headers = {
+        "Authorization": f"Bearer {os.getenv('VAPI_PRIVATE_KEY')}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "assistantId": "efe9791d-f257-40d3-8760-715fdeb669f0",
+        "phoneNumberId": "4882efe5-5767-44ef-bb42-4aaf3752dda4",
+        "customer": {"number": "+18133409551"}, # Your actual cell number here
+        "assistantOverrides": {
+            "variableValues": {"veteran_name": "Arina Kiera"}
+        }
+    }
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        return jsonify({"status": "success", "data": response.json()}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/get-transcript', methods=['GET'])
+def get_transcript():
+    url = "https://api.vapi.ai/call?limit=1"
+    headers = {"Authorization": f"Bearer {os.getenv('VAPI_PRIVATE_KEY')}"}
+
+    try:
+        response = requests.get(url, headers=headers)
+        calls = response.json()
+        if calls:
+            call = calls[0]
+            return jsonify({
+                "transcript": call.get("transcript", "Transcript is still processing..."),
+                "summary": call.get("summary", ""),
+                "ended_reason": call.get("endedReason", ""),
+                "duration_seconds": call.get("durationSeconds"),
+            }), 200
+        return jsonify({"transcript": "No calls found.", "summary": ""}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Streaming chat endpoint. Body: { job_id, messages: [{role, content}] }"""
+    body = request.get_json(force=True, silent=True) or {}
+    job_id   = body.get("job_id", "")
+    messages = body.get("messages", [])
+
+    # ── 1. Veteran case context ──────────────────────────────────────────
+    job = jobs.get(job_id)
+    result = job.result if (job and job.result) else None
+    audit  = (result or {}).get("audit_result", {})
+    flags  = audit.get("flags", [])
+
+    def fmt_flags(fs):
+        lines = []
+        for f in fs:
+            lines.append(
+                f"  - {f.get('condition_name','?')} [{f.get('flag_type','?')}]: "
+                f"assigned {f.get('assigned_rating','?')}%, eligible {f.get('eligible_rating','?')}%, "
+                f"CFR {f.get('cfr_citation','N/A')} — {f.get('explanation','')}"
+            )
+        return "\n".join(lines) if lines else "  None"
+
+    veteran_block = f"""Veteran: {audit.get('veteran_name', 'Unknown')}
+Current Combined Rating: {audit.get('current_combined_rating', '?')}%
+Corrected Combined Rating: {audit.get('corrected_combined_rating', '?')}%
+Current Monthly Pay: ${audit.get('current_monthly_pay_usd', '?')}
+Potential Monthly Pay: ${audit.get('potential_monthly_pay_usd', '?')}
+Annual Impact: ${audit.get('annual_impact_usd', '?')}
+TDIU Eligible: {audit.get('tdiu_eligible', 'Unknown')}
+PACT Act Conditions Found: {', '.join(audit.get('pact_act_conditions_found', [])) or 'None'}
+Audit Flags:
+{fmt_flags(flags)}
+Auditor Notes: {audit.get('auditor_notes', 'N/A')}
+Rule-Based Report: {(result or {}).get('rule_based_report', 'N/A')}""" if result else "No audit data available for this session."
+
+    # ── 2. Call transcript (best-effort) ────────────────────────────────
+    transcript_block = "No call transcript available."
+    try:
+        r = requests.get(
+            "https://api.vapi.ai/call?limit=1",
+            headers={"Authorization": f"Bearer {os.getenv('VAPI_PRIVATE_KEY')}"},
+            timeout=5,
+        )
+        calls = r.json()
+        if calls:
+            t = calls[0].get("transcript", "")
+            s = calls[0].get("summary", "")
+            if t or s:
+                transcript_block = ""
+                if s:
+                    transcript_block += f"Summary: {s}\n\n"
+                if t:
+                    transcript_block += f"Full transcript:\n{t}"
+    except Exception:
+        pass
+
+    # ── 3. CFR reference — only codes in this veteran's flags ────────────
+    flag_codes = {str(f.get("diagnostic_code", "")) for f in flags if f.get("diagnostic_code")}
+    cfr_lines = []
+    for code, entry in _CFR_DATA.items():
+        if code in flag_codes or entry.get("condition","").lower() in [f.get("condition_name","").lower() for f in flags]:
+            cfr_lines.append(
+                f"  DC {code} — {entry.get('condition','?')} | Max: {entry.get('max_rating','?')}% | "
+                f"{entry.get('cfr_section','?')}"
+            )
+    cfr_block = "\n".join(cfr_lines) if cfr_lines else "No matching CFR codes found for this veteran's conditions."
+
+    # ── 4. PACT Act summary ──────────────────────────────────────────────
+    pact_lines = []
+    for cat_key, cat in _PACT_DATA.get("exposure_categories", {}).items():
+        conditions = cat.get("presumptive_conditions", [])
+        names = [str(c.get("name", c)) if isinstance(c, dict) else str(c) for c in conditions[:8]]
+        pact_lines.append(f"  {cat.get('label', cat_key)}: {', '.join(names)}" + (" ..." if len(conditions) > 8 else ""))
+    pact_block = "\n".join(pact_lines) if pact_lines else "N/A"
+
+    # ── 5. Pay rates ─────────────────────────────────────────────────────
+    pay_block = json.dumps(_PAY_DATA.get("veteran_alone", {}), indent=2)
+
+    # ── 6. Combined rating table ─────────────────────────────────────────
+    combined_block = json.dumps(_COMBINED_DATA, indent=2)[:2000]  # cap at 2k chars
+
+    system_prompt = f"""You are an expert VA disability claims advisor with deep knowledge of 38 CFR Part 4, the PACT Act, VA combined rating math, TDIU eligibility, and the VA appeals process.
+
+You have the complete audit results for this veteran's specific case. You can:
+- Explain findings in plain language the veteran can understand
+- Answer questions about VA regulations, rating criteria, and appeal options
+- Discuss the VA call transcript and interpret what representatives said
+- Help draft appeal language, nexus statement talking points, and NOD arguments
+- Be honest about uncertainty — do not overstate what you know
+
+=== VETERAN CASE ===
+{veteran_block}
+
+=== VA CALL TRANSCRIPT ===
+{transcript_block}
+
+=== CFR PART 4 (relevant to this case) ===
+{cfr_block}
+
+=== VA PAY RATES 2026 (veteran alone) ===
+{pay_block}
+
+=== PACT ACT PRESUMPTIVE CONDITIONS ===
+{pact_block}
+
+=== COMBINED RATING TABLE ===
+{combined_block}
+
+Be empathetic — these are veterans navigating a complex bureaucratic system. Cite specific CFR sections when relevant. Keep responses clear and actionable."""
+
+    # ── Convert messages to Gemini format ────────────────────────────────
+    gemini_contents = []
+    for m in messages[-20:]:  # cap at 20 messages
+        role = "model" if m.get("role") == "assistant" else "user"
+        gemini_contents.append(
+            _genai_types.Content(role=role, parts=[_genai_types.Part(text=m.get("content", ""))])
+        )
+
+    def generate():
+        try:
+            for chunk in _gemini.models.generate_content_stream(
+                model="gemini-2.5-flash",
+                contents=gemini_contents,
+                config=_genai_types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    max_output_tokens=1024,
+                ),
+            ):
+                if chunk.text:
+                    yield f"data: {json.dumps(chunk.text)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps(f'Error: {exc}')}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)

@@ -214,8 +214,10 @@ async function downloadAllDocuments(profile) {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${folderName}_Claim_Documents.zip`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 
   } catch (err) {
     console.error("Download failed:", err);
@@ -231,6 +233,7 @@ async function downloadAllDocuments(profile) {
 
 document.addEventListener("DOMContentLoaded", () => {
   initProfileSwitcher();   // build the nav dropdown before anything else
+  renderProfile(activeProfileKey);  // wire up the download button and render default profile
   initVABranchVerification();
   startSubmissionPolling();
 });

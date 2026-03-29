@@ -1,10 +1,23 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import LandingPage from './components/LandingPage'
 import UploadPage from './components/UploadPage'
 import LoadingScreen from './components/LoadingScreen'
 import TrackerPage from './components/TrackerPage'
-import CallingAgentPage from './components/CallingAgentPage'
-import AuditResultsPage from './components/AuditResultsPage'
+import Dashboard from './components/Dashboard'
+
+const SESSION_KEY = 'vetclaim_session'
+
+function saveSession(data) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)) } catch (_) {}
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY) } catch (_) {}
+}
+
+function loadSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') } catch (_) { return null }
+}
 
 export default function App() {
   const [page, setPage] = useState('landing')
@@ -13,9 +26,32 @@ export default function App() {
   const [auditResult, setAuditResult] = useState(null)
   const [uploadError, setUploadError] = useState(null)
 
+  // Restore session on mount
+  useEffect(() => {
+    const saved = loadSession()
+    if (!saved) return
+    if (saved.auditResult) {
+      setAuditResult(saved.auditResult)
+      setJobId(saved.jobId ?? null)
+      setPage('dashboard')
+    } else if (saved.jobId) {
+      setJobId(saved.jobId)
+      setPage('tracker')
+    }
+  }, [])
+
+  // Persist session whenever jobId or auditResult changes
+  useEffect(() => {
+    if (jobId || auditResult) {
+      saveSession({ jobId, auditResult })
+    }
+  }, [jobId, auditResult])
+
   const handleSubmit = async (files) => {
     setUploadedFiles(files)
     setUploadError(null)
+    setAuditResult(null)
+    clearSession()
     setPage('loading')
 
     const formData = new FormData()
@@ -38,7 +74,14 @@ export default function App() {
 
   const handleViewAudit = (result) => {
     setAuditResult(result)
-    setPage('results')
+    setPage('dashboard')
+  }
+
+  const handleGoHome = () => {
+    clearSession()
+    setJobId(null)
+    setAuditResult(null)
+    setPage('landing')
   }
 
   return (
@@ -46,7 +89,7 @@ export default function App() {
       {page === 'landing' && (
         <LandingPage
           onUploadClick={() => setPage('upload')}
-          onCallClick={() => setPage('caller')}
+          onCallClick={() => setPage('upload')}
         />
       )}
       {page === 'upload' && (
@@ -61,21 +104,16 @@ export default function App() {
         <TrackerPage
           files={uploadedFiles}
           jobId={jobId}
-          onBack={() => setPage('landing')}
-          onCallClick={() => setPage('caller')}
+          onBack={handleGoHome}
           onViewAudit={handleViewAudit}
         />
       )}
-      {page === 'results' && (
-        <AuditResultsPage
+      {page === 'dashboard' && (
+        <Dashboard
           result={auditResult}
           jobId={jobId}
-          onBack={() => setPage('landing')}
-          onCallClick={() => setPage('caller')}
+          onNewClaim={handleGoHome}
         />
-      )}
-      {page === 'caller' && (
-        <CallingAgentPage onBack={() => setPage('tracker')} />
       )}
     </div>
   )
