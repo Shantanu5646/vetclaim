@@ -144,7 +144,61 @@ function showSubmissionBanner(submission) {
 }
 
 
-/* ── Init ───────────────────────────────────────────────────────── */
+/* ── Download All Documents ─────────────────────────────────── */
+
+/**
+ * Fetch all claim documents for the active profile and download them as a
+ * zip file containing individual PDFs inside a folder named after the veteran.
+ *
+ * @param {object} profile - the active PROFILES entry from profiles.js
+ */
+async function downloadAllDocuments(profile) {
+  const btn = document.getElementById("download-all-docs");
+  if (!btn) return;
+
+  const originalText = btn.textContent;
+  btn.textContent = "⏳ Preparing download…";
+  btn.disabled = true;
+
+  try {
+    const zip = new JSZip();
+    // Folder name: e.g. "James_T_Milner"
+    const folderName = profile.name.replace(/\s+/g, "_");
+    const folder = zip.folder(folderName);
+
+    for (const doc of profile.documents) {
+      if (!doc.url || doc.url === "#") continue;
+      const url = doc.url.startsWith("http") ? doc.url : `${VA_PORTAL_BASE}${doc.url}`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const bytes = await res.arrayBuffer();
+        // Use the original filename from the URL
+        const filename = doc.url.split("/").pop();
+        folder.file(filename, bytes);
+      } catch (e) {
+        console.warn(`Skipping ${doc.name}:`, e.message);
+      }
+    }
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${folderName}_Claim_Documents.zip`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+  } catch (err) {
+    console.error("Download failed:", err);
+    alert("Could not generate the zip. Make sure the portal server is running.");
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+}
+
+
+
 
 document.addEventListener("DOMContentLoaded", () => {
   initProfileSwitcher();   // build the nav dropdown before anything else

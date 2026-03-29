@@ -14,7 +14,7 @@ const PROFILES = {
   // Profile 1: James T. Milner — real test case from testcase/james_millner/
   // U.S. Marine Corps, 3 combat deployments to Afghanistan (OEF).
   // Decision date: Nov 15, 2023.
-  // ALS granted (presumptive), PTSD denied (insufficient nexus), Ear Condition denied.
+  // ALS granted (presumptive), PTSD denied (C&P examiner: less likely than not), Ear Condition denied.
   james: {
     name: "James T. Milner",
     claimNumber: "000-00-0000",
@@ -33,17 +33,16 @@ const PROFILES = {
     appealDeadline: "November 15, 2024",
     documents: [
       { name: "📄 Rating Decision Letter (Nov 15, 2023)",        url: "/testcase/james_millner/james_miller_decision_letter.pdf" },
-      { name: "📄 C&P Exam — Combined DBQs (Aug 14, 2023)",      url: "/testcase/james_millner/C&P_Exam_Combined_DBQs.pdf" },
+      { name: "📄 C&P Exam — Combined DBQs (Nov 10, 2023)",      url: "/testcase/james_millner/C&P_Exam_Combined_DBQs.pdf" },
       { name: "📄 DBQ — PTSD Review (Aug 14, 2023)",             url: "/testcase/james_millner/james_miller_personal_statement.pdf" },
       { name: "📄 DBQ — Ear Conditions / Vestibular (2023)",     url: "/testcase/james_millner/james_miller_ear_dbq.pdf" },
-      { name: "📄 DBQ — ALS (2023)",                             url: "/testcase/james_millner/DBQ_ALS_James_Milner_SAMPLE.pdf" },
-      { name: "📄 Personal Statement / VA Form 21-0781 (Jan 2023)", url: "/testcase/james_millner/james_miller_personal_statement.pdf" },
+      { name: "📄 DBQ — ALS (Nov 3, 2023)",                      url: "/testcase/james_millner/DBQ_ALS_James_Milner_SAMPLE.pdf" },
     ],
     deniedCount: 2,
     conditions: [
-      { name: "Amyotrophic Lateral Sclerosis (ALS)",            code: "8017", decision: "Service Connected — Presumptive", rating: "100%", denied: false },
-      { name: "Post-Traumatic Stress Disorder (PTSD)",          code: "9411", decision: "Denied — Insufficient Nexus",      rating: "0%",   denied: true  },
-      { name: "Ear Condition (Tinnitus / Vestibular Disorder)", code: "6260", decision: "Denied — Inconsistent Documentation", rating: "0%", denied: true },
+      { name: "Amyotrophic Lateral Sclerosis (ALS)",            code: "8017", decision: "Service Connected — Presumptive (38 C.F.R. § 3.318)", rating: "100%", denied: false },
+      { name: "Post-Traumatic Stress Disorder (PTSD) with MDD", code: "9411", decision: "Denied — C&P Examiner: Less Likely Than Not", rating: "0%", denied: true },
+      { name: "Ear Condition (Tinnitus / Vestibular Disorder)",  code: "6260", decision: "Denied — Symptoms Inconsistent with Service Records", rating: "0%", denied: true },
     ],
   },
 
@@ -78,11 +77,10 @@ const PROFILES = {
     ],
     deniedCount: 2,
     conditions: [
-      { name: "Right Below-Knee Amputation (Transtibial) — DC 5163",  code: "5163", decision: "Service Connected",          rating: "40%", denied: false },
-      { name: "Residual Limb Pain / Phantom Pain (Secondary)",        code: "5299", decision: "Service Connected — Secondary", rating: "10%", denied: false },
-      { name: "Right Hip / Knee Overuse Syndrome (Secondary)",        code: "5010", decision: "Service Connected — Secondary", rating: "10%", denied: false },
-      { name: "PTSD with Major Depressive Disorder",                  code: "9411", decision: "Denied — Stressor Not Corroborated", rating: "0%", denied: true },
-      { name: "Rheumatoid Arthritis / Bilateral DJD Knees",           code: "5002", decision: "Denied — Nexus Not Established", rating: "0%", denied: true },
+      { name: "Traumatic Right Below-Knee Amputation (Transtibial) with Residual Limb Pain, Phantom Limb Pain & Skin Complications", code: "5163", decision: "Service Connected — Direct (Combat Casualty)", rating: "40%", denied: false },
+      { name: "Right Hip & Knee Overuse Syndrome (Secondary to BKA)", code: "5010", decision: "Service Connected — Secondary (38 C.F.R. § 3.310)", rating: "10%", denied: false },
+      { name: "PTSD with Major Depressive Disorder (MDD)",            code: "9411", decision: "Denied — Stressor Not Corroborated", rating: "0%", denied: true },
+      { name: "Rheumatoid Arthritis (RA) with Bilateral DJD Knees & Carpal Tunnel Syndrome", code: "5002", decision: "Denied — Nexus Not Established (Not on PACT Act Presumptive List)", rating: "0%", denied: true },
     ],
   },
 

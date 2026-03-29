@@ -156,6 +156,19 @@ a:hover { color: #1a4480; }
 .va-doc-list li { padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
 .va-doc-list li:last-child { border-bottom: none; }
 
+.va-btn--download-all {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+.va-btn--download-all:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* --- Buttons --- */
 .va-btn {
   display: inline-block;
