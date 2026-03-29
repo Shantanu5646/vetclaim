@@ -614,7 +614,7 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
             ),
         ):
             if event.is_final_response() and event.content:
-                for part in event.content.parts:
+                for part in (event.content.parts or []):
                     if hasattr(part, "text") and part.text:
                         final_text += part.text
         return final_text
