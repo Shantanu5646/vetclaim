@@ -1,23 +1,45 @@
-# Mac System Files
-.DS_Store
-**/.DS_Store
+# Documentation — keep locally, don't commit
+*.md
 
-# Python (Backend)
-backend/venv/
-backend/env/
+# Root test file (old test.py)
+/test.py
+
+# Environment variables — never commit API keys
+.env
+.env.local
+
+# Claude Code session and project metadata (local only)
+.claude/
+
+# Kiro specs and steering (local only)
+.kiro/
+
+# VA portal uploaded PDFs — generated at runtime, not source code
+mock_va_portal/submissions/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
 
-# React / Node (Frontend)
-frontend/node_modules/
-frontend/dist/
-frontend/build/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.eslintcache
+# Test caches
+.pytest_cache/
+.hypothesis/
 
-# Secret API Keys
-.env
-.env.local
+# Node
+node_modules/
+coverage/
+
+# macOS
+.DS_Store
+.DS_store
+**/.DS_store
+
+# VS Code workspace settings (optional — remove this line if team uses shared settings)
+.vscode/
