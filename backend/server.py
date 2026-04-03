@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from gevent import monkey
 monkey.patch_all()
+
 """
 VetClaim Backend Server — Flask API on port 5001.
 
@@ -10,8 +13,6 @@ Routes:
   GET  /api/download        — serve a filled PDF by ?path= query param
   GET  /api/status          — health check
 """
-
-from __future__ import annotations
 
 import json
 import os
