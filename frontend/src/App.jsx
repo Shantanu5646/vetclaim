@@ -58,7 +58,7 @@ export default function App() {
     files.forEach(f => formData.append('files', f))
 
     try {
-      const res = await fetch('https://unrentable-bully-porsha.ngrok-free.dev/api/upload', { method: 'POST', body: formData })
+      const res = await fetch('https://vetclaim-backend.onrender.com/api/upload', { method: 'POST', body: formData })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `Upload failed (${res.status})`)

@@ -61,7 +61,7 @@ export default function AuditResultsPage({ result, jobId, onBack, onCallClick })
   async function handleSubmitAppeal() {
     setSubmitState('submitting')
     try {
-      const res = await fetch('https://unrentable-bully-porsha.ngrok-free.dev/api/submit-appeal', {
+      const res = await fetch('https://vetclaim-backend.onrender.com/api/submit-appeal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: jobId }),
@@ -200,7 +200,7 @@ export default function AuditResultsPage({ result, jobId, onBack, onCallClick })
                     )}
                   </div>
                   <a
-                    href={`https://unrentable-bully-porsha.ngrok-free.dev/api/download?path=${encodeURIComponent(form.filled_path)}`}
+                    href={`https://vetclaim-backend.onrender.com/api/download?path=${encodeURIComponent(form.filled_path)}`}
                     download
                     className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg text-white transition-colors"
                     style={{ background: NAV_BLUE }}
