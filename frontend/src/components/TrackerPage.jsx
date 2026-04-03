@@ -50,8 +50,7 @@ export default function TrackerPage({ files, jobId, onBack, onViewAudit }) {
     }
 
     // Connect to the real SSE pipeline stream
-    const es = new EventSource(`https://vetclaim-backend.onrender.com/api/upload/api/stream/${jobId}`)
-
+       const es = new EventSource(`https://vetclaim-backend.onrender.com/api/stream/${jobId}`)
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data)
