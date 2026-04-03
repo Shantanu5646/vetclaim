@@ -1,3 +1,5 @@
+from gevent import monkey
+monkey.patch_all()
 """
 VetClaim Backend Server — Flask API on port 5001.
 
