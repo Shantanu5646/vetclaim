@@ -299,6 +299,16 @@ Respond with a structured JSON audit result. You MUST output purely valid JSON w
   "combined_rating_error": false,
   "auditor_notes": "..."
 }
+```
+
+## Rules
+- Always cite the specific CFR section for every flag.
+- Confidence score: 0.9+ = clear match, 0.7-0.9 = likely, below 0.7 = possible.
+- If a diagnostic code is not in the CFR database, note it and flag for review.
+- Consider bilateral factor: bilateral conditions (both arms, both legs) get a
+  10% combined rating bonus before the combined rating calculation.
+- Do not speculate beyond what the records state. Base flags on documented symptoms.
+"""
 
 # ---------------------------------------------------------------------------
 # VA Forms API constants and Rule-Based Auditor
