@@ -202,7 +202,7 @@ function FormsSection({ vaFormLinks, jobId }) {
   async function handleSubmitAppeal() {
     setSubmitState('submitting')
     try {
-      const res = await fetch('/api/submit-appeal', {
+      const res = await fetch('https://unrentable-bully-porsha.ngrok-free.dev/api/submit-appeal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: jobId }),
@@ -242,7 +242,7 @@ function FormsSection({ vaFormLinks, jobId }) {
               </div>
             </div>
             <a
-              href={`/api/download?path=${encodeURIComponent(form.filled_path)}`}
+              href={`https://unrentable-bully-porsha.ngrok-free.dev/api/download?path=${encodeURIComponent(form.filled_path)}`}
               download
               className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg text-white transition-colors"
               style={{ background: NAV_BLUE }}
@@ -326,7 +326,7 @@ function VACallSection() {
     setErrorMsg('')
     setCallData(null)
     try {
-      const res = await fetch('/api/call-va', { method: 'POST' })
+      const res = await fetch('https://unrentable-bully-porsha.ngrok-free.dev/api/call-va', { method: 'POST' })
       const data = await res.json()
       if (!res.ok || data.status === 'error') throw new Error(data.message || data.error || 'Failed to start call')
       setStatus('success')
@@ -341,7 +341,7 @@ function VACallSection() {
   const fetchTranscript = async () => {
     setFetchingTranscript(true)
     try {
-      const res = await fetch('/api/get-transcript')
+      const res = await fetch('https://unrentable-bully-porsha.ngrok-free.dev/api/get-transcript')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to fetch transcript')
       setCallData({
@@ -509,7 +509,7 @@ function ChatSection({ jobId, veteranName }) {
     setMessages(prev => [...prev, { role: 'assistant', content: '' }])
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('https://unrentable-bully-porsha.ngrok-free.dev/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: jobId, messages: nextMessages }),

@@ -50,7 +50,7 @@ export default function TrackerPage({ files, jobId, onBack, onViewAudit }) {
     }
 
     // Connect to the real SSE pipeline stream
-    const es = new EventSource(`/api/stream/${jobId}`)
+    const es = new EventSource(`https://unrentable-bully-porsha.ngrok-free.dev/api/stream/${jobId}`)
 
     es.onmessage = (e) => {
       try {
