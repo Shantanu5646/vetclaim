@@ -136,3 +136,4 @@ zipp==3.23.0
 hypothesis>=6.100.0
 pytest>=8.0.0
 gunicorn
+openai

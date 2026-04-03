@@ -24,8 +24,8 @@ from typing import Literal
 import requests
 from flask import jsonify
 from dotenv import load_dotenv
-from google import genai as _genai
-from google.genai import types as _genai_types
+from openai import OpenAI
+
 # ---------------------------------------------------------------------------
 # sys.path — ensure project root is importable so agent modules resolve
 # ---------------------------------------------------------------------------
@@ -47,7 +47,8 @@ from werkzeug.utils import secure_filename
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5173"])
+# Open CORS so your AWS Amplify frontend can connect!
+CORS(app)
 
 _OUTPUT_DIR = _BACKEND_DIR / "output"
 _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -71,8 +72,8 @@ _PACT_DATA       = _load_json("pact_act_conditions.json")
 _PAY_DATA        = _load_json("va_pay_rates_2026.json")
 _COMBINED_DATA   = _load_json("combined_ratings_table.json")
 
-# Gemini client (for /api/chat)
-_gemini = _genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+# OpenAI client (for /api/chat)
+_openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ---------------------------------------------------------------------------
 # Job store
@@ -470,26 +471,25 @@ You have the complete audit results for this veteran's specific case. You can:
 
 Be empathetic — these are veterans navigating a complex bureaucratic system. Cite specific CFR sections when relevant. Keep responses clear and actionable."""
 
-    # ── Convert messages to Gemini format ────────────────────────────────
-    gemini_contents = []
+    # ── Convert messages to OpenAI format ────────────────────────────────
+    openai_messages = [{"role": "system", "content": system_prompt}]
     for m in messages[-20:]:  # cap at 20 messages
-        role = "model" if m.get("role") == "assistant" else "user"
-        gemini_contents.append(
-            _genai_types.Content(role=role, parts=[_genai_types.Part(text=m.get("content", ""))])
-        )
+        # OpenAI expects roles to be strictly 'system', 'user', or 'assistant'
+        role = "assistant" if m.get("role") == "assistant" else "user"
+        openai_messages.append({"role": role, "content": m.get("content", "")})
 
     def generate():
         try:
-            for chunk in _gemini.models.generate_content_stream(
-                model="gemini-2.5-flash",
-                contents=gemini_contents,
-                config=_genai_types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    max_output_tokens=1024,
-                ),
-            ):
-                if chunk.text:
-                    yield f"data: {json.dumps(chunk.text)}\n\n"
+            # Using gpt-4o-mini as it is the standard fast/efficient model for text generation
+            response = _openai_client.chat.completions.create(
+                model="gpt-5.4-mini",
+                messages=openai_messages,
+                stream=True,
+                max_tokens=1024,
+            )
+            for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    yield f"data: {json.dumps(chunk.choices[0].delta.content)}\n\n"
         except Exception as exc:
             yield f"data: {json.dumps(f'Error: {exc}')}\n\n"
         yield "data: [DONE]\n\n"
