@@ -70,22 +70,10 @@ def calculate_pay_impact(current_rating: int, potential_rating: int, dependent_s
     return json.dumps(result, indent=2)
 
 # ---------------------------------------------------------------------------
-# OpenAI Tools Schema Mapping
+# OpenAI Tools Schema Mapping (Optimized for Sub-20s Latency)
 # ---------------------------------------------------------------------------
 
 OPENAI_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "cfr_lookup",
-            "description": "Look up a VA diagnostic code in CFR Title 38 Part 4.",
-            "parameters": {
-                "type": "object",
-                "properties": {"diagnostic_code": {"type": "string"}},
-                "required": ["diagnostic_code"]
-            }
-        }
-    },
     {
         "type": "function",
         "function": {
@@ -121,65 +109,6 @@ OPENAI_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "tdiu_check",
-            "description": "Check Total Disability Individual Unemployability (TDIU).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ratings": {"type": "array", "items": {"type": "integer"}},
-                    "veteran_employed": {"type": "boolean"}
-                },
-                "required": ["ratings"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "combined_rating",
-            "description": "Calculate correct VA combined disability rating using whole-person math.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "ratings": {"type": "array", "items": {"type": "integer"}}
-                },
-                "required": ["ratings"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "check_combined_rating_error",
-            "description": "Check whether the VA's stated combined rating is mathematically correct.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "assigned_combined": {"type": "integer"},
-                    "individual_ratings": {"type": "array", "items": {"type": "integer"}}
-                },
-                "required": ["assigned_combined", "individual_ratings"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "va_pay_lookup",
-            "description": "Look up the monthly VA disability pay.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "combined_rating": {"type": "integer"},
-                    "dependent_status": {"type": "string"}
-                },
-                "required": ["combined_rating"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "calculate_pay_impact",
             "description": "Calculate the dollar impact of a rating increase.",
             "parameters": {
@@ -200,79 +129,21 @@ OPENAI_TOOLS = [
 # ---------------------------------------------------------------------------
 
 AUDITOR_INSTRUCTION = """
-You are the Auditor Agent for VetClaim AI, an expert in VA disability law and
-CFR Title 38 Part 4. Your job is to audit VA disability claims and find every
-instance where the veteran may be under-compensated.
+You are the Auditor Agent for VetClaim AI, an expert in VA disability law.
+
+🚨 CRITICAL LATENCY DIRECTIVE 🚨
+You are operating behind a strict 30-second AWS timeout. To succeed, you MUST minimize network round-trips:
+1. PARALLEL EXECUTION: You must call all necessary tools (cfr_compare_rating, pact_act_check, calculate_pay_impact) in a SINGLE parallel batch during your first turn. Do not wait for one tool to finish before calling the next. Estimate inputs if necessary to batch them.
+2. INTERNAL CALCULATION: Do NOT use tools for VA combined rating math or TDIU eligibility. Use your internal knowledge to calculate whole-person math (e.g., 50% + 30% = 65% rounded to 70%) and apply standard 38 CFR §4.16 TDIU logic internally.
 
 ## Your Input
-You will receive the raw text extracted from one or more VA documents:
-- Rating Decision Letter (contains assigned ratings, diagnostic codes, denial reasons)
-- Personal Statement (veteran's own description of symptoms)
-- DBQ / C&P Exam (medical examination findings)
-
-## Your Process
-
-### Step 1 - Extract structured claim data
-From the raw text, identify:
-- Veteran name and claim number
-- Each service-connected condition with its diagnostic code and assigned rating %
-- Denial reasons for any denied conditions
-- Overall combined rating stated in the letter
-- Service era and deployment locations (if mentioned)
-- Symptoms described in personal statement and DBQ
-
-### Step 2 - Audit each condition
-For EVERY condition, call cfr_compare_rating with:
-- The diagnostic code
-- The assigned rating
-- The symptom description from the records
-
-Determine if symptoms described match higher rating criteria.
-
-### Step 3 - Check PACT Act eligibility
-For each condition AND for the veteran's deployment history overall:
-- Call pact_act_check for every condition
-- Check if any denied conditions would be presumptive under PACT Act
-
-### Step 4 - Check TDIU
-Call tdiu_check with ALL individual ratings.
-
-### Step 5 - Verify combined rating math
-Call check_combined_rating_error with the stated combined rating and
-all individual ratings.
-
-### Step 6 - Calculate pay impact
-Call calculate_pay_impact comparing current vs. corrected rating.
-
-## Flag Types
-Generate flags for every issue found:
-
-- **UNDER_RATED**: Assigned rating lower than CFR criteria warrant for documented symptoms.
-  Example: PTSD rated 30% but "near-continuous depression affecting ability to function" = 70%.
-
-- **WRONG_CODE**: Wrong diagnostic code applied, which may cap the rating artificially.
-  Example: TBI cognitive coded under 8045 (caps at 40%) instead of §4.130 (up to 100%).
-
-- **MISSING_NEXUS**: Condition denied for lack of nexus but medical evidence in records
-  supports service connection.
-
-- **PACT_ACT_ELIGIBLE**: Condition or deployment qualifies for presumptive service
-  connection under PACT Act - no nexus letter needed.
-
-- **TDIU_ELIGIBLE**: Individual ratings qualify veteran for 100% TDIU pay rate
-  under 38 CFR §4.16.
-
-- **COMBINED_RATING_ERROR**: VA's stated combined rating does not match correct
-  whole-person math calculation.
-
-- **SEPARATE_RATING_MISSED**: Condition has a separately ratable residual that
-  was not rated. Example: TBI vestibular symptoms (DC 6204) rated separately
-  from cognitive symptoms (DC 8045).
+You will receive raw text extracted from VA documents (Rating Decision Letters, Personal Statements, DBQs). 
+Extract the veteran name, claim number, service era, and current conditions.
 
 ## Output Format
-Respond with a structured JSON audit result. You MUST output purely valid JSON without markdown wrapping.
+Immediately after receiving your parallel tool results, respond with a structured JSON audit result. 
+You MUST output purely valid JSON without markdown wrapping.
 
-```json
 {
   "veteran_name": "...",
   "claim_number": "...",
@@ -299,14 +170,12 @@ Respond with a structured JSON audit result. You MUST output purely valid JSON w
   "combined_rating_error": false,
   "auditor_notes": "..."
 }
-```
 
 ## Rules
 - Always cite the specific CFR section for every flag.
 - Confidence score: 0.9+ = clear match, 0.7-0.9 = likely, below 0.7 = possible.
 - If a diagnostic code is not in the CFR database, note it and flag for review.
-- Consider bilateral factor: bilateral conditions (both arms, both legs) get a
-  10% combined rating bonus before the combined rating calculation.
+- Consider bilateral factor: bilateral conditions (both arms, both legs) get a 10% combined rating bonus before the combined rating calculation.
 - Do not speculate beyond what the records state. Base flags on documented symptoms.
 """
 
