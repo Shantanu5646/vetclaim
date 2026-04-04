@@ -70,59 +70,10 @@ def calculate_pay_impact(current_rating: int, potential_rating: int, dependent_s
     return json.dumps(result, indent=2)
 
 # ---------------------------------------------------------------------------
-# OpenAI Tools Schema Mapping (Optimized for Sub-20s Latency)
+# OpenAI Tools Schema Mapping (Zero-Shot for Maximum Speed)
 # ---------------------------------------------------------------------------
 
-OPENAI_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "cfr_compare_rating",
-            "description": "Compare assigned rating against CFR criteria to find under-ratings.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "diagnostic_code": {"type": "string"},
-                    "assigned_rating": {"type": "integer"},
-                    "symptom_description": {"type": "string"}
-                },
-                "required": ["diagnostic_code", "assigned_rating", "symptom_description"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "pact_act_check",
-            "description": "Check PACT Act presumptive eligibility based on locations/era.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "condition_name": {"type": "string"},
-                    "deployment_locations": {"type": "array", "items": {"type": "string"}},
-                    "service_era": {"type": "string"}
-                },
-                "required": ["condition_name", "deployment_locations"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "calculate_pay_impact",
-            "description": "Calculate the dollar impact of a rating increase.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "current_rating": {"type": "integer"},
-                    "potential_rating": {"type": "integer"},
-                    "dependent_status": {"type": "string"}
-                },
-                "required": ["current_rating", "potential_rating"]
-            }
-        }
-    }
-]
+OPENAI_TOOLS = [] # Empty! We want instant results without network delays.
 
 # ---------------------------------------------------------------------------
 # Auditor Agent instruction prompt
@@ -132,16 +83,15 @@ AUDITOR_INSTRUCTION = """
 You are the Auditor Agent for VetClaim AI, an expert in VA disability law.
 
 🚨 CRITICAL LATENCY DIRECTIVE 🚨
-You are operating behind a strict 30-second AWS timeout. To succeed, you MUST minimize network round-trips:
-1. PARALLEL EXECUTION: You must call all necessary tools (cfr_compare_rating, pact_act_check, calculate_pay_impact) in a SINGLE parallel batch during your first turn. Do not wait for one tool to finish before calling the next. Estimate inputs if necessary to batch them.
-2. INTERNAL CALCULATION: Do NOT use tools for VA combined rating math or TDIU eligibility. Use your internal knowledge to calculate whole-person math (e.g., 50% + 30% = 65% rounded to 70%) and apply standard 38 CFR §4.16 TDIU logic internally.
+You are operating behind a strict 25-second AWS timeout.
+You have NO external tools. You MUST use your internal expert knowledge of 38 CFR Part 4, the PACT Act, and standard VA whole-person combined rating math to perform the audit.
 
 ## Your Input
-You will receive raw text extracted from VA documents (Rating Decision Letters, Personal Statements, DBQs). 
+You will receive raw text extracted from VA documents. 
 Extract the veteran name, claim number, service era, and current conditions.
 
 ## Output Format
-Immediately after receiving your parallel tool results, respond with a structured JSON audit result. 
+Respond immediately with a structured JSON audit result. 
 You MUST output purely valid JSON without markdown wrapping.
 
 {
@@ -173,9 +123,7 @@ You MUST output purely valid JSON without markdown wrapping.
 
 ## Rules
 - Always cite the specific CFR section for every flag.
-- Confidence score: 0.9+ = clear match, 0.7-0.9 = likely, below 0.7 = possible.
-- If a diagnostic code is not in the CFR database, note it and flag for review.
-- Consider bilateral factor: bilateral conditions (both arms, both legs) get a 10% combined rating bonus before the combined rating calculation.
+- Consider bilateral factor for relevant conditions.
 - Do not speculate beyond what the records state. Base flags on documented symptoms.
 """
 
@@ -425,8 +373,6 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
-                tools=OPENAI_TOOLS,
-                tool_choice="auto",
                 response_format={"type": "json_object"}
             )
         except Exception as e:
