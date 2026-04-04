@@ -485,7 +485,7 @@ Be empathetic — these are veterans navigating a complex bureaucratic system. C
         try:
             # Using gpt-4o-mini as it is the standard fast/efficient model for text generation
             response = _openai_client.chat.completions.create(
-                model="gpt-5.4-mini",
+                model="gpt-4o-mini",
                 messages=openai_messages,
                 stream=True,
                 max_tokens=1024,
