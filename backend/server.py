@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 VetClaim Backend Server — Flask API on port 5001.
 
@@ -10,7 +8,7 @@ Routes:
   GET  /api/download        — serve a filled PDF by ?path= query param
   GET  /api/status          — health check
 """
-
+from __future__ import annotations
 import json
 import os
 import queue
@@ -25,7 +23,8 @@ import requests
 from flask import jsonify
 from dotenv import load_dotenv
 from openai import OpenAI
-
+import threading
+import time
 # ---------------------------------------------------------------------------
 # sys.path — ensure project root is importable so agent modules resolve
 # ---------------------------------------------------------------------------
@@ -118,6 +117,20 @@ def _run_pipeline(job: JobRecord) -> None:
         payload = json.dumps({"step": step, "status": status})
         job.events.put(payload)
 
+    # ---------------------------------------------------------
+    # THE HEARTBEAT: Keeps AWS from closing the connection
+    # ---------------------------------------------------------
+    keep_alive_active = True
+    def keep_alive():
+        while keep_alive_active:
+            time.sleep(5)
+            if keep_alive_active:
+                emit("thinking", "AI is analyzing medical evidence...")
+                
+    heartbeat = threading.Thread(target=keep_alive, daemon=True)
+    heartbeat.start()
+    # ---------------------------------------------------------
+
     try:
         # Step 1 — Parse documents
         emit("parsing_documents", "Parsing uploaded documents...")
@@ -125,21 +138,28 @@ def _run_pipeline(job: JobRecord) -> None:
         parser = VAClaimParser(pdf_dir=str(job.upload_dir))
         parsed_claim = parser.extract_all()
 
-        # Step 2 — Run audit (LLM + rule-based)
+        # Step 2 — Run audit (LLM + rule-based + Form Downloading)
         emit("running_audit", "Running AI audit on your claim...")
         from agents.auditor_agent import run_full_audit
+        
+        # This takes 35+ seconds, but our heartbeat thread will keep AWS happy!
         result = run_full_audit(parsed_claim)
 
-        # Step 3 — Form filling happens inside run_full_audit; emit milestone
-        emit("filling_forms", "Filling VA forms...")
+        # Step 3 — Form filling milestone
+        emit("filling_forms", "Finalizing VA forms...")
 
         # Step 4 — Complete
         job.result = result
         job.status = "complete"
+        
+        # Turn off the heartbeat before persisting
+        keep_alive_active = False 
+        
         _persist_job(job)
         emit("complete", "Audit complete. Redirecting to results...")
 
     except Exception as exc:  # noqa: BLE001
+        keep_alive_active = False # Turn off heartbeat on crash
         job.status = "error"
         job.error = str(exc)
         payload = json.dumps({"step": "error", "status": f"Pipeline error: {exc}"})
