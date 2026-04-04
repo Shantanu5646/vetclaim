@@ -490,151 +490,173 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
         print("🛑 CRITICAL: Max loops reached! Agent got stuck in a tool loop.")
         llm_result = '{"error": "Audit timed out due to complex tool usage."}'
 
-    # Normalize LLM result to dict
-    if isinstance(llm_result, str):
+    import traceback  # Add this right here to catch the ghost
+
+    print("✅ Loop finished. Starting final JSON parsing and Form Filling...")
+    try:
+        # Normalize LLM result to dict safely
         stripped = llm_result.strip()
-        if stripped.startswith("```"):
-            stripped = re.sub(r"^```[a-zA-Z]*\n?", "", stripped)
-            stripped = re.sub(r"\n?```$", "", stripped.strip())
+        if stripped.startswith("```json"):
+            stripped = stripped[7:]
+        elif stripped.startswith("```"):
+            stripped = stripped[3:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        stripped = stripped.strip()
+
         try:
             audit_result = json.loads(stripped)
-        except json.JSONDecodeError:
+            print("✅ JSON parsed successfully!")
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON DECODE ERROR: {str(e)}")
             audit_result = {
                 "error": "LLM returned non-JSON response",
                 "raw_response": llm_result[:500],
             }
-    else:
-        audit_result = {"error": f"LLM returned unexpected type"}
 
-    # Map LLM flags to form numbers
-    flag_types = _extract_flag_types(audit_result)
-    llm_forms = _forms_for_flags(flag_types)
+        # Map LLM flags to form numbers
+        flag_types = _extract_flag_types(audit_result)
+        llm_forms = _forms_for_flags(flag_types)
 
-    # Run rule-based auditor
-    rule_auditor = VAClaimAuditor()
-    rule_result = rule_auditor.analyze_claim(parsed_claim)
+        print("✅ Running Rule-Based Auditor...")
+        rule_auditor = VAClaimAuditor()
+        rule_result = rule_auditor.analyze_claim(parsed_claim)
 
-    all_forms: list[str] = list(llm_forms)
-    if rule_result.get("rule_based_triggered") and "20-0996" not in all_forms:
-        all_forms.append("20-0996")
+        all_forms: list[str] = list(llm_forms)
+        if rule_result.get("rule_based_triggered") and "20-0996" not in all_forms:
+            all_forms.append("20-0996")
 
-    filled_form_paths: list[str] = []
-    va_form_links: list[dict] = []
+        filled_form_paths: list[str] = []
+        va_form_links: list[dict] = []
 
-    if "auditor_notes" not in audit_result:
-        audit_result["auditor_notes"] = ""
+        if "auditor_notes" not in audit_result:
+            audit_result["auditor_notes"] = ""
 
-    backend_dir = Path(__file__).resolve().parent.parent
-    (backend_dir / "output").mkdir(parents=True, exist_ok=True)
+        backend_dir = Path(__file__).resolve().parent.parent
+        (backend_dir / "output").mkdir(parents=True, exist_ok=True)
 
-    llm_name = audit_result.get("veteran_name") or parsed_claim.veteran_name or ""
-    parts = llm_name.split()
-    first_name = parts[0] if parts else ""
-    last_name  = " ".join(parts[1:]) if len(parts) > 1 else ""
+        print("✅ Generating dummy demographic data...")
+        llm_name = audit_result.get("veteran_name") or parsed_claim.veteran_name or ""
+        parts = llm_name.split()
+        first_name = parts[0] if parts else ""
+        last_name  = " ".join(parts[1:]) if len(parts) > 1 else ""
 
-    from datetime import date as _date
-    today = _date.today()
-    sig_month = str(today.month).zfill(2)
-    sig_day   = str(today.day).zfill(2)
-    sig_year  = str(today.year)
+        from datetime import date as _date
+        today = _date.today()
+        sig_month = str(today.month).zfill(2)
+        sig_day   = str(today.day).zfill(2)
+        sig_year  = str(today.year)
 
-    llm_conditions = [
-        f.get("condition_name", "")
-        for f in audit_result.get("flags", [])
-        if isinstance(f, dict) and f.get("condition_name")
-    ]
-    if llm_conditions:
-        issue_text = "; ".join(llm_conditions[:4])[:200]
-    elif parsed_claim.conditions:
-        issue_text = "; ".join(
-            c.condition_name for c in parsed_claim.conditions if c.condition_name
-        )[:200]
-    else:
-        issue_text = "Service-connected condition"
+        llm_conditions = [
+            f.get("condition_name", "")
+            for f in audit_result.get("flags", [])
+            if isinstance(f, dict) and f.get("condition_name")
+        ]
+        if llm_conditions:
+            issue_text = "; ".join(llm_conditions[:4])[:200]
+        elif parsed_claim.conditions:
+            issue_text = "; ".join(
+                c.condition_name for c in parsed_claim.conditions if c.condition_name
+            )[:200]
+        else:
+            issue_text = "Service-connected condition"
 
-    import hashlib as _hashlib
-    _seed = int(_hashlib.md5(llm_name.encode()).hexdigest()[:8], 16)
-    import random as _random
-    _rng = _random.Random(_seed)
+        import hashlib as _hashlib
+        _seed = int(_hashlib.md5(llm_name.encode()).hexdigest()[:8], 16)
+        import random as _random
+        _rng = _random.Random(_seed)
 
-    _area_codes   = ["210", "512", "619", "757", "910", "843", "850", "253", "907", "808"]
-    _streets      = ["4821 Valor Ridge Dr", "1203 Liberty Oak Ln", "7742 Patriot Blvd",
-                     "335 Ft. Bragg Rd", "9110 Veterans Way", "620 Honor Guard Ave",
-                     "2244 Service Member St", "5501 Eagle Crest Dr"]
-    _cities_states = [
-        ("San Antonio", "TX", "78201"), ("Fayetteville", "NC", "28301"),
-        ("Jacksonville", "NC", "28540"), ("Virginia Beach", "VA", "23451"),
-        ("Colorado Springs", "CO", "80903"), ("Killeen", "TX", "76540"),
-        ("Clarksville", "TN", "37040"), ("Tacoma", "WA", "98402"),
-    ]
-    _city, _state, _zip = _cities_states[_seed % len(_cities_states)]
+        _area_codes   = ["210", "512", "619", "757", "910", "843", "850", "253", "907", "808"]
+        _streets      = ["4821 Valor Ridge Dr", "1203 Liberty Oak Ln", "7742 Patriot Blvd",
+                         "335 Ft. Bragg Rd", "9110 Veterans Way", "620 Honor Guard Ave",
+                         "2244 Service Member St", "5501 Eagle Crest Dr"]
+        _cities_states = [
+            ("San Antonio", "TX", "78201"), ("Fayetteville", "NC", "28301"),
+            ("Jacksonville", "NC", "28540"), ("Virginia Beach", "VA", "23451"),
+            ("Colorado Springs", "CO", "80903"), ("Killeen", "TX", "76540"),
+            ("Clarksville", "TN", "37040"), ("Tacoma", "WA", "98402"),
+        ]
+        _city, _state, _zip = _cities_states[_seed % len(_cities_states)]
 
-    veteran_data = {
-        "first_name":     first_name,
-        "last_name":      last_name,
-        "ssn_1":          "000",
-        "ssn_2":          str(_rng.randint(10, 99)),
-        "ssn_3":          str(_rng.randint(1000, 9999)),
-        "dob_month":      str(_rng.randint(1, 12)).zfill(2),
-        "dob_day":        str(_rng.randint(1, 28)).zfill(2),
-        "dob_year":       str(_rng.randint(1968, 1985)),
-        "phone_area":     _area_codes[_seed % len(_area_codes)],
-        "phone_mid":      str(_rng.randint(200, 999)),
-        "phone_last":     str(_rng.randint(1000, 9999)),
-        "address_street": _streets[_seed % len(_streets)],
-        "address_city":   _city,
-        "address_state":  _state,
-        "address_zip":    _zip,
-        "issue":          issue_text,
-        "date_month":     sig_month,
-        "date_day":       sig_day,
-        "date_year":      sig_year,
-        "sign_month":     sig_month,
-        "sign_day":       sig_day,
-        "sign_year":      sig_year,
-    }
+        veteran_data = {
+            "first_name":     first_name,
+            "last_name":      last_name,
+            "ssn_1":          "000",
+            "ssn_2":          str(_rng.randint(10, 99)),
+            "ssn_3":          str(_rng.randint(1000, 9999)),
+            "dob_month":      str(_rng.randint(1, 12)).zfill(2),
+            "dob_day":        str(_rng.randint(1, 28)).zfill(2),
+            "dob_year":       str(_rng.randint(1968, 1985)),
+            "phone_area":     _area_codes[_seed % len(_area_codes)],
+            "phone_mid":      str(_rng.randint(200, 999)),
+            "phone_last":     str(_rng.randint(1000, 9999)),
+            "address_street": _streets[_seed % len(_streets)],
+            "address_city":   _city,
+            "address_state":  _state,
+            "address_zip":    _zip,
+            "issue":          issue_text,
+            "date_month":     sig_month,
+            "date_day":       sig_day,
+            "date_year":      sig_year,
+            "sign_month":     sig_month,
+            "sign_day":       sig_day,
+            "sign_year":      sig_year,
+        }
 
-    for form_number in all_forms:
-        try:
-            filer = VAFormFiler(backend_dir=str(backend_dir))
-            filled_path, fields_found, fields_filled = filer.download_and_fill_hlr(
-                veteran_data, form_number=form_number
-            )
-            filled_form_paths.append(filled_path)
-            va_form_links.append({
-                "form_number": form_number,
-                "filled_path": filled_path,
-                "pdf_url": filer._get_form_pdf_url_from_api(form_number),
-                "fields_found": fields_found,
-                "fields_filled": fields_filled,
-            })
-        except Exception as exc:
-            audit_result["auditor_notes"] += f" [Form {form_number} download failed: {str(exc)}]"
+        print(f"✅ Downloading and filling {len(all_forms)} VA Forms...")
+        for form_number in all_forms:
+            try:
+                filer = VAFormFiler(backend_dir=str(backend_dir))
+                filled_path, fields_found, fields_filled = filer.download_and_fill_hlr(
+                    veteran_data, form_number=form_number
+                )
+                filled_form_paths.append(filled_path)
+                va_form_links.append({
+                    "form_number": form_number,
+                    "filled_path": filled_path,
+                    "pdf_url": filer._get_form_pdf_url_from_api(form_number),
+                    "fields_found": fields_found,
+                    "fields_filled": fields_filled,
+                })
+            except Exception as exc:
+                print(f"⚠️ Warning: Form {form_number} download failed: {str(exc)}")
+                audit_result["auditor_notes"] += f" [Form {form_number} download failed: {str(exc)}]"
 
-    if not isinstance(audit_result, dict):
-        audit_result = {"error": "Could not parse audit result"}
+        print("✅ Forms complete. Preparing final return dictionary...")
+        if not isinstance(audit_result, dict):
+            audit_result = {"error": "Could not parse audit result"}
 
-    if "flags" not in audit_result:
-        audit_result["flags"] = []
-    if "veteran_name" not in audit_result:
-        audit_result["veteran_name"] = parsed_claim.veteran_name or "Unknown"
-    if "current_combined_rating" not in audit_result:
-        audit_result["current_combined_rating"] = None
-    if "corrected_combined_rating" not in audit_result:
-        audit_result["corrected_combined_rating"] = None
-    if "current_monthly_pay_usd" not in audit_result:
-        audit_result["current_monthly_pay_usd"] = None
-    if "potential_monthly_pay_usd" not in audit_result:
-        audit_result["potential_monthly_pay_usd"] = None
-    if "annual_impact_usd" not in audit_result:
-        audit_result["annual_impact_usd"] = None
+        if "flags" not in audit_result:
+            audit_result["flags"] = []
+        if "veteran_name" not in audit_result:
+            audit_result["veteran_name"] = parsed_claim.veteran_name or "Unknown"
+        if "current_combined_rating" not in audit_result:
+            audit_result["current_combined_rating"] = None
+        if "corrected_combined_rating" not in audit_result:
+            audit_result["corrected_combined_rating"] = None
+        if "current_monthly_pay_usd" not in audit_result:
+            audit_result["current_monthly_pay_usd"] = None
+        if "potential_monthly_pay_usd" not in audit_result:
+            audit_result["potential_monthly_pay_usd"] = None
+        if "annual_impact_usd" not in audit_result:
+            audit_result["annual_impact_usd"] = None
 
-    return {
-        "audit_result": audit_result,
-        "rule_based_report": rule_result.get("report", ""),
-        "rule_based_triggered": rule_result.get("rule_based_triggered", False),
-        "filled_form_path": filled_form_paths[0] if filled_form_paths else None,
-        "filled_form_paths": filled_form_paths,
-        "forms_needed": all_forms,
-        "va_form_links": va_form_links,
-    }
+        final_dict = {
+            "audit_result": audit_result,
+            "rule_based_report": rule_result.get("report", ""),
+            "rule_based_triggered": rule_result.get("rule_based_triggered", False),
+            "filled_form_path": filled_form_paths[0] if filled_form_paths else None,
+            "filled_form_paths": filled_form_paths,
+            "forms_needed": all_forms,
+            "va_form_links": va_form_links,
+        }
+        
+        print("🎉 PIPELINE COMPLETE! Returning payload to server.py")
+        return final_dict
+
+    except Exception as e:
+        print("\n" + "💥"*20)
+        print("FATAL PIPELINE CRASH CAUGHT:")
+        traceback.print_exc()
+        print("💥"*20 + "\n")
+        raise e  # Re-raise so server.py knows it failed
