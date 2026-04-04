@@ -543,26 +543,39 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
     max_loops = 10
     loop_count = 0
     
+    print("\n" + "="*50)
+    print("🚀 STARTING OPENAI AUDIT PIPELINE")
+    print("="*50)
+
     # Tool execution loop
     while loop_count < max_loops:
         loop_count += 1
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            tools=OPENAI_TOOLS,
-            tool_choice="auto",
-            response_format={"type": "json_object"}
-        )
+        print(f"🔄 Loop {loop_count}: Sending request to OpenAI...")
         
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                tools=OPENAI_TOOLS,
+                tool_choice="auto",
+                response_format={"type": "json_object"}
+            )
+        except Exception as e:
+            print(f"❌ OPENAI API CRASH: {str(e)}")
+            llm_result = '{"error": "OpenAI API Crash"}'
+            break
+            
         message = response.choices[0].message
         
         # If the LLM didn't call any tools, it's done generating the JSON audit result.
         if not message.tool_calls:
+            print("✅ OpenAI finished tool usage. Generating final JSON.")
             llm_result = message.content
+            print(f"📝 RAW LLM RESULT SNIPPET: {llm_result[:300]}...")
             break
             
-        # CRITICAL FIX: Convert the OpenAI object to a standard Python dictionary 
-        # before appending it to the history, otherwise it crashes on the next loop!
+        print(f"🛠️ OpenAI requested {len(message.tool_calls)} tool calls.")
+        
         message_dict = {"role": message.role, "content": message.content}
         if message.tool_calls:
             message_dict["tool_calls"] = [
@@ -577,15 +590,16 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
             ]
         messages.append(message_dict)
         
-        # Execute requested tools and append their results back to the messages
         for tool_call in message.tool_calls:
             function_name = tool_call.function.name
+            print(f"  -> Executing tool: {function_name}")
             function_to_call = available_functions.get(function_name)
             if function_to_call:
                 try:
                     function_args = json.loads(tool_call.function.arguments)
                     function_response = function_to_call(**function_args)
                 except Exception as e:
+                    print(f"  ❌ Tool {function_name} crashed internally: {str(e)}")
                     function_response = json.dumps({"error": str(e)})
                 
                 messages.append({
@@ -595,6 +609,7 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
                     "content": str(function_response),
                 })
             else:
+                print(f"  ❌ Unknown tool requested: {function_name}")
                 messages.append({
                     "tool_call_id": tool_call.id,
                     "role": "tool",
@@ -602,8 +617,8 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
                     "content": json.dumps({"error": "Unknown function"}),
                 })
 
-    # Safety fallback if the agent gets stuck in a tool loop
     if loop_count >= max_loops and not llm_result:
+        print("🛑 CRITICAL: Max loops reached! Agent got stuck in a tool loop.")
         llm_result = '{"error": "Audit timed out due to complex tool usage."}'
 
     # Normalize LLM result to dict
