@@ -540,9 +540,12 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
     ]
 
     llm_result = ""
+    max_loops = 10
+    loop_count = 0
     
     # Tool execution loop
-    while True:
+    while loop_count < max_loops:
+        loop_count += 1
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
@@ -558,7 +561,21 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
             llm_result = message.content
             break
             
-        messages.append(message)
+        # CRITICAL FIX: Convert the OpenAI object to a standard Python dictionary 
+        # before appending it to the history, otherwise it crashes on the next loop!
+        message_dict = {"role": message.role, "content": message.content}
+        if message.tool_calls:
+            message_dict["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments
+                    }
+                } for tc in message.tool_calls
+            ]
+        messages.append(message_dict)
         
         # Execute requested tools and append their results back to the messages
         for tool_call in message.tool_calls:
@@ -575,7 +592,7 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
                     "tool_call_id": tool_call.id,
                     "role": "tool",
                     "name": function_name,
-                    "content": function_response,
+                    "content": str(function_response),
                 })
             else:
                 messages.append({
@@ -584,6 +601,10 @@ def run_full_audit(parsed_claim: ParsedClaim) -> dict:
                     "name": function_name,
                     "content": json.dumps({"error": "Unknown function"}),
                 })
+
+    # Safety fallback if the agent gets stuck in a tool loop
+    if loop_count >= max_loops and not llm_result:
+        llm_result = '{"error": "Audit timed out due to complex tool usage."}'
 
     # Normalize LLM result to dict
     if isinstance(llm_result, str):
