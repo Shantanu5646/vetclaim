@@ -16,7 +16,7 @@ export default function CallingAgentPage({ onBack }) {
     setCallData(null)
 
     try {
-      const res = await fetch('https://vetclaim-backend.onrender.com/api/call-va', { method: 'POST' })
+      const res = await fetch('http://localhost:5001/api/call-va', { method: 'POST' })
       const data = await res.json()
 
       if (!res.ok || data.status === 'error') {
@@ -35,7 +35,7 @@ export default function CallingAgentPage({ onBack }) {
   const fetchTranscript = async () => {
     setFetchingTranscript(true)
     try {
-      const res = await fetch('https://vetclaim-backend.onrender.com/api/get-transcript')
+      const res = await fetch('http://localhost:5001/api/get-transcript')
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to fetch transcript')
       setCallData({

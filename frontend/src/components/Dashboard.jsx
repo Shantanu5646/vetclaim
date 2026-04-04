@@ -202,7 +202,7 @@ function FormsSection({ vaFormLinks, jobId }) {
   async function handleSubmitAppeal() {
     setSubmitState('submitting')
     try {
-      const res = await fetch('https://vetclaim-backend.onrender.com/api/submit-appeal', {
+      const res = await fetch('http://localhost:5001/api/submit-appeal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: jobId }),
